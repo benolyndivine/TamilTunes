@@ -108,7 +108,13 @@ app.use((req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🎵 Tamil Music Finder Backend running on http://localhost:${PORT}`);
-  console.log(`📡 API Endpoints available at http://localhost:${PORT}/api/songs, /api/lyrics, /api/sources`);
-});
+// Only start the HTTP listener when run directly (not serverless)
+if (process.env.NETLIFY !== 'true' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  app.listen(PORT, () => {
+    console.log(`🎵 Tamil Music Finder Backend running on http://localhost:${PORT}`);
+    console.log(`📡 API Endpoints available at http://localhost:${PORT}/api/songs, /api/lyrics, /api/sources`);
+  });
+}
+
+export default app;
+
