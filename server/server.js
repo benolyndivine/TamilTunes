@@ -21,18 +21,25 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// API Routes
+// API Routes (mounted at both /api and root level for seamless Netlify serverless routing)
 app.use('/api/songs', songsRouter);
+app.use('/songs', songsRouter);
+
 app.use('/api/lyrics', lyricsRouter);
+app.use('/lyrics', lyricsRouter);
+
 app.use('/api/sources', sourcesRouter);
+app.use('/sources', sourcesRouter);
+
 app.use('/api/download', downloadRouter);
+app.use('/download', downloadRouter);
 
 /**
- * GET /api/stream?url=<encoded-cdn-url>
+ * GET /api/stream or /stream?url=<encoded-cdn-url>
  * Proxies JioSaavn CDN audio to the browser so HTMLAudioElement can play
  * full 320kbps songs without CORS issues. Supports range requests for seeking.
  */
-app.get('/api/stream', async (req, res) => {
+const streamHandler = async (req, res) => {
   const targetUrl = req.query.url;
   if (!targetUrl) {
     return res.status(400).json({ error: 'url parameter is required' });
@@ -79,37 +86,50 @@ app.get('/api/stream', async (req, res) => {
       res.status(502).json({ error: 'Could not stream audio from source', details: err.message });
     }
   }
-});
+};
 
+app.get('/api/stream', streamHandler);
+app.get('/stream', streamHandler);
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
+const healthHandler = (req, res) => {
   res.json({
     status: 'ok',
     service: 'Tamil Music Finder & Synced Lyrics Backend Proxy',
     timestamp: new Date().toISOString(),
     supportedProviders: ['iTunes IN', 'JioSaavn', 'LRCLIB', 'Masstamilan', 'Mp3chetta', 'Koshalworld', 'Pagalnew', 'Spotify', 'Apple Music']
   });
-});
+};
 
-// Serve frontend in production build if dist directory exists
-const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath));
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
 
-// Fallback for SPA routing in production
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    return next();
-  }
-  res.sendFile(path.join(distPath, 'index.html'), (err) => {
-    if (err) {
-      res.status(200).send('Tamil Music Finder API Server is running. Launch frontend on Vite dev server (port 5173).');
-    }
+// Check if running in a serverless function environment (Netlify / AWS Lambda)
+const isServerless = process.env.NETLIFY === 'true' ||
+  Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+  Boolean(process.env.LAMBDA_TASK_ROOT);
+
+if (isServerless) {
+  // In serverless, static files are handled by Netlify CDN; Express only serves API
+  app.use((req, res) => {
+    res.status(404).json({ error: 'API route not found', path: req.originalUrl || req.url });
   });
-});
+} else {
+  // Local Express static file server for production builds
+  const distPath = path.join(__dirname, '../dist');
+  app.use(express.static(distPath));
 
-// Only start the HTTP listener when run directly (not serverless)
-if (process.env.NETLIFY !== 'true' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/songs') || req.path.startsWith('/stream')) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'), (err) => {
+      if (err) {
+        res.status(200).send('Tamil Music Finder API Server is running. Launch frontend on Vite dev server (port 5173).');
+      }
+    });
+  });
+
   app.listen(PORT, () => {
     console.log(`🎵 Tamil Music Finder Backend running on http://localhost:${PORT}`);
     console.log(`📡 API Endpoints available at http://localhost:${PORT}/api/songs, /api/lyrics, /api/sources`);
@@ -117,4 +137,3 @@ if (process.env.NETLIFY !== 'true' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
 }
 
 export default app;
-
