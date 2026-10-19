@@ -180,40 +180,49 @@ export default function Home() {
   const handleSelectSong = async (song, shouldAutoPlay = false) => {
     if (!song) return;
 
-    // 1. Immediately display song with whatever audioUrl it already has (preview/none)
+    // 1. Immediately display song
     setSelectedSong(song);
 
-    // 2. Load lyrics & sources in parallel (don't block on audio resolution)
+    // 2. Load lyrics & sources in parallel
     loadSongLyrics(song);
     loadDownloadSources(song);
 
-    // 3. Resolve full 320kbps stream URL asynchronously
+    // If song already has full 320kbps audio, play immediately if requested
+    if (song.isFullAudio && song.audioUrl) {
+      if (shouldAutoPlay) {
+        player.playTrack(song, songs);
+      }
+      return;
+    }
+
+    // 3. Resolve full 320kbps stream URL asynchronously for preview tracks
     setIsResolvingAudio(true);
     try {
       const resolved = await resolveSongAudio(song.title, song.artist, song.album);
-      if (resolved && resolved.streamUrl) {
-        // Build an enriched song object with the full stream URL (via our CORS proxy)
+      if (resolved && resolved.url) {
+        const fullAudioUrl = resolved.streamUrl || resolved.url;
         const enrichedSong = {
           ...song,
-          audioUrl: resolved.streamUrl,     // /api/stream?url=... for player (CORS-free)
-          downloadUrl: resolved.url,          // direct CDN url for download route
+          audioUrl: fullAudioUrl,
+          downloadUrl: resolved.url,
           isFullAudio: true,
           audioQuality: resolved.quality || '320 Kbps HQ Studio Audio',
+          audioType: '320 Kbps Full HQ Audio',
           duration: resolved.duration || song.duration,
           durationFormatted: resolved.duration
             ? `${Math.floor(resolved.duration / 60)}:${String(resolved.duration % 60).padStart(2, '0')}`
             : song.durationFormatted
         };
 
-        // Update selected song with enriched data (this gives SongDetails the correct download URL too)
+        // Update selected song and songs list
         setSelectedSong(enrichedSong);
+        setSongs(prev => prev.map(s => s.id === song.id ? enrichedSong : s));
 
         // Start or update player with full audio
         if (shouldAutoPlay) {
           player.playTrack(enrichedSong, songs);
         }
       } else {
-        // Fallback: use whatever was there (iTunes preview or nothing)
         if (shouldAutoPlay) {
           player.playTrack(song, songs);
         }

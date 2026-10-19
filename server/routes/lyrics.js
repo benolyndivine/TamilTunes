@@ -63,6 +63,63 @@ async function fetchWithRetry(url, params = {}, retries = 2, delay = 800) {
 }
 
 /**
+ * Fetches lyrics from JioSaavn API as resilient fallback
+ */
+async function fetchJioSaavnLyrics(trackName, artistName) {
+  try {
+    const searchRes = await axios.get('https://www.jiosaavn.com/api.php', {
+      params: {
+        __call: 'search.getResults',
+        _format: 'json',
+        _marker: '0',
+        p: 1,
+        n: 3,
+        q: `${trackName} ${artistName}`.trim()
+      },
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 5000
+    });
+
+    const song = (searchRes.data?.results || [])[0];
+    if (song?.id) {
+      const lyricsRes = await axios.get('https://www.jiosaavn.com/api.php', {
+        params: {
+          __call: 'lyrics.getLyrics',
+          _format: 'json',
+          _marker: '0',
+          lyrics_id: song.id,
+          ctx: 'web6dot0'
+        },
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 5000
+      });
+
+      if (lyricsRes.data?.lyrics) {
+        const plainText = lyricsRes.data.lyrics
+          .replace(/<br\s*[\/]?>/gi, '\n')
+          .replace(/&quot;/g, '"')
+          .replace(/&#039;/g, "'")
+          .replace(/&amp;/g, '&')
+          .trim();
+
+        return {
+          trackName: song.song || trackName,
+          artistName: song.singers || artistName,
+          albumName: song.album || '',
+          duration: parseInt(song.duration, 10) || 0,
+          syncedLyrics: null,
+          plainLyrics: plainText,
+          source: 'JioSaavn Official Lyrics Archive'
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('JioSaavn lyrics fallback error:', err.message);
+  }
+  return null;
+}
+
+/**
  * GET /api/lyrics
  * Query params:
  * - track_name
@@ -93,7 +150,7 @@ router.get('/', async (req, res) => {
     }
   }
 
-  // Check verified local fallback first if match is exact
+  // Check verified local fallback first
   const fallback = getFallbackLyrics(rawTrack, rawArtist);
 
   try {
@@ -122,7 +179,6 @@ router.get('/', async (req, res) => {
         });
 
         if (Array.isArray(searchResults) && searchResults.length > 0) {
-          // Prefer synchronized lyrics
           result = searchResults.find(r => r.syncedLyrics) || searchResults[0];
         }
       } catch (e) {
@@ -163,7 +219,7 @@ router.get('/', async (req, res) => {
       return res.json(payload);
     }
 
-    // If LRCLIB had no lyrics, check if we have a verified fallback
+    // If LRCLIB had no lyrics, check verified fallback archive
     if (fallback) {
       const payload = {
         ...fallback,
@@ -172,6 +228,13 @@ router.get('/', async (req, res) => {
       };
       lyricsCache.set(cacheKey, { data: payload, timestamp: Date.now() });
       return res.json(payload);
+    }
+
+    // Check JioSaavn lyrics
+    const saavnLyrics = await fetchJioSaavnLyrics(trackName, artistName);
+    if (saavnLyrics) {
+      lyricsCache.set(cacheKey, { data: saavnLyrics, timestamp: Date.now() });
+      return res.json(saavnLyrics);
     }
 
     // No lyrics found anywhere
@@ -196,6 +259,13 @@ router.get('/', async (req, res) => {
       };
       lyricsCache.set(cacheKey, { data: payload, timestamp: Date.now() });
       return res.json(payload);
+    }
+
+    // Check JioSaavn lyrics on LRCLIB 503
+    const saavnLyrics = await fetchJioSaavnLyrics(trackName, artistName);
+    if (saavnLyrics) {
+      lyricsCache.set(cacheKey, { data: saavnLyrics, timestamp: Date.now() });
+      return res.json(saavnLyrics);
     }
 
     return res.status(503).json({

@@ -70,8 +70,17 @@ export async function getLyrics({ trackName, artistName, albumName, duration, fo
       },
       timeout: 8000
     });
-    if (response.data && (response.data.synced || response.data.plain)) {
-      return response.data;
+    if (response.data && (response.data.syncedLyrics || response.data.plainLyrics || response.data.synced || response.data.plain)) {
+      const d = response.data;
+      const rawSynced = d.syncedLyrics || d.syncedRaw || (typeof d.synced === 'string' ? d.synced : null);
+      const rawPlain = d.plainLyrics || d.plain || null;
+      return {
+        ...d,
+        syncedLyrics: rawSynced,
+        plainLyrics: rawPlain,
+        synced: rawSynced ? parseLrc(rawSynced) : (Array.isArray(d.synced) ? d.synced : null),
+        plain: rawPlain
+      };
     }
   } catch (err) {
     console.warn('Backend lyrics fetch failed, falling back to direct LRCLIB API:', err.message);
@@ -101,10 +110,12 @@ export async function getLyrics({ trackName, artistName, albumName, duration, fo
       const parsed = data.syncedLyrics ? parseLrc(data.syncedLyrics) : [];
       return {
         id: `lrclib-${data.id}`,
-        trackName: data.trackName,
-        artistName: data.artistName,
-        albumName: data.albumName,
-        duration: data.duration,
+        trackName: data.trackName || trackName,
+        artistName: data.artistName || artistName,
+        albumName: data.albumName || albumName,
+        duration: data.duration || duration,
+        syncedLyrics: data.syncedLyrics || null,
+        plainLyrics: data.plainLyrics || null,
         synced: parsed.length > 0 ? parsed : null,
         syncedRaw: data.syncedLyrics || null,
         plain: data.plainLyrics || null,
@@ -127,10 +138,12 @@ export async function getLyrics({ trackName, artistName, albumName, duration, fo
         const parsed = best.syncedLyrics ? parseLrc(best.syncedLyrics) : [];
         return {
           id: `lrclib-${best.id}`,
-          trackName: best.trackName,
-          artistName: best.artistName,
-          albumName: best.albumName,
-          duration: best.duration,
+          trackName: best.trackName || trackName,
+          artistName: best.artistName || artistName,
+          albumName: best.albumName || albumName,
+          duration: best.duration || duration,
+          syncedLyrics: best.syncedLyrics || null,
+          plainLyrics: best.plainLyrics || null,
           synced: parsed.length > 0 ? parsed : null,
           syncedRaw: best.syncedLyrics || null,
           plain: best.plainLyrics || null,
@@ -146,6 +159,8 @@ export async function getLyrics({ trackName, artistName, albumName, duration, fo
   return {
     trackName,
     artistName,
+    syncedLyrics: null,
+    plainLyrics: null,
     synced: null,
     syncedRaw: null,
     plain: null,

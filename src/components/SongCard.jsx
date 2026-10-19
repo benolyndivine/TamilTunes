@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Play, Pause, Disc3, Plus, Check, Clock, Radio, Music, Download, Copy, CheckCheck } from 'lucide-react';
+import { Play, Pause, Disc3, Plus, Check, Clock, Radio, Music, Download, Copy, CheckCheck, Image as ImageIcon } from 'lucide-react';
 import { extractSongDetails } from '../utils/matchSong';
+import { resolveSongAudio } from '../services/musicMetadata';
 
 export default function SongCard({
   song,
@@ -15,6 +16,7 @@ export default function SongCard({
   const [justQueued, setJustQueued] = useState(false);
   const [copiedField, setCopiedField] = useState(null); // 'title' | 'artist'
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingCover, setIsDownloadingCover] = useState(false);
 
   const { title: cleanTitle, movie } = extractSongDetails(song.title);
   const displayAlbum = movie || song.album || '';
@@ -50,21 +52,79 @@ export default function SongCard({
     }
   };
 
-  const handleDownloadClick = (e) => {
+  const handleDownloadClick = async (e) => {
     e.stopPropagation();
-
     setIsDownloading(true);
-    const bestAudioUrl = song.downloadUrl || (song.isFullAudio ? song.audioUrl : '');
-    const downloadEndpoint = `/api/download/song?audioUrl=${encodeURIComponent(bestAudioUrl)}&title=${encodeURIComponent(displayTitle)}&artist=${encodeURIComponent(song.artist || '')}&album=${encodeURIComponent(displayAlbum || '')}`;
 
-    const link = document.createElement('a');
-    link.href = downloadEndpoint;
-    link.setAttribute('download', `${displayTitle} (320kbps).mp3`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      let targetUrl = song.downloadUrl || (song.isFullAudio ? song.audioUrl : '');
 
-    setTimeout(() => setIsDownloading(false), 2000);
+      if (!targetUrl || targetUrl.includes('preview') || targetUrl.includes('apple.com') || targetUrl.includes('mzstatic.com')) {
+        try {
+          const resolved = await resolveSongAudio(displayTitle, song.artist, displayAlbum);
+          if (resolved && resolved.url) {
+            targetUrl = resolved.url;
+          }
+        } catch (err) {
+          console.warn('Resolve error during card download:', err);
+        }
+      }
+
+      const cleanFilename = `${displayTitle.replace(/[<>:"/\\|?*]/g, '')} (320kbps).mp3`;
+      const downloadEndpoint = `/api/download/song?audioUrl=${encodeURIComponent(targetUrl || '')}&title=${encodeURIComponent(displayTitle)}&artist=${encodeURIComponent(song.artist || '')}&album=${encodeURIComponent(displayAlbum || '')}`;
+
+      const link = document.createElement('a');
+      link.href = downloadEndpoint;
+      link.setAttribute('download', cleanFilename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('SongCard download error:', err);
+    } finally {
+      setTimeout(() => setIsDownloading(false), 2000);
+    }
+  };
+
+  const handleDownloadCoverClick = async (e) => {
+    e.stopPropagation();
+    if (!song.artworkUrl) return;
+
+    setIsDownloadingCover(true);
+    const cleanFilename = `${displayTitle.replace(/[<>:"/\\|?*]/g, '')} - Cover.jpg`;
+
+    try {
+      let blob = null;
+      try {
+        const directRes = await fetch(song.artworkUrl, { mode: 'cors' });
+        if (directRes.ok) blob = await directRes.blob();
+      } catch (err) {}
+
+      if (!blob) {
+        try {
+          const artworkEndpoint = `/api/download/artwork?url=${encodeURIComponent(song.artworkUrl)}&title=${encodeURIComponent(displayTitle)}`;
+          const proxyRes = await fetch(artworkEndpoint);
+          if (proxyRes.ok) blob = await proxyRes.blob();
+        } catch (err) {}
+      }
+
+      if (blob) {
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.setAttribute('download', cleanFilename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+      } else {
+        window.open(song.artworkUrl, '_blank');
+      }
+    } catch (err) {
+      window.open(song.artworkUrl, '_blank');
+    } finally {
+      setIsDownloadingCover(false);
+    }
   };
 
   return (
@@ -185,14 +245,27 @@ export default function SongCard({
           </button>
 
           <div className="flex items-center space-x-1">
+            {/* Quick Cover Download Button */}
+            {song.artworkUrl && (
+              <button
+                type="button"
+                onClick={handleDownloadCoverClick}
+                disabled={isDownloadingCover}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-800 transition"
+                title="Download cover artwork"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             {/* Quick Direct Download Button */}
-            {song.audioUrl && (
+            {(song.audioUrl || song.downloadUrl) && (
               <button
                 type="button"
                 onClick={handleDownloadClick}
                 disabled={isDownloading}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition"
-                title="Download song MP3 directly"
+                title="Download full 320kbps song directly"
               >
                 <Download className="w-3.5 h-3.5" />
               </button>

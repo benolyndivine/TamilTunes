@@ -84,17 +84,12 @@ export function useSyncedLyrics(parsedLines = [], currentTime = 0, isSynced = tr
     if (!autoScroll || activeIndex < 0 || !containerRef.current) return;
 
     const container = containerRef.current;
-    // Use rAF to batch DOM reads after React paint
     const raf = requestAnimationFrame(() => {
       const activeElement = container.querySelector(`[data-index="${activeIndex}"]`);
       if (activeElement) {
-        const containerHeight = container.clientHeight;
-        const elementOffsetTop = activeElement.offsetTop;
-        const elementHeight = activeElement.clientHeight;
-        const targetScrollTop = elementOffsetTop - (containerHeight / 2) + (elementHeight / 2);
-        container.scrollTo({
-          top: Math.max(0, targetScrollTop),
-          behavior: 'smooth'
+        activeElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
         });
       }
     });

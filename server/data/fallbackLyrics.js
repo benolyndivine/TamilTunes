@@ -170,7 +170,7 @@ En rowdy baby
 Rowdy baby un mela thaane`
   },
 
-  // Naatu Naatu (Tamil / RRR - Naatu Koothu)
+  // Naatu Naatu / Naatu Koothu (Tamil / RRR)
   'naatu naatu': {
     trackName: 'Naatu Koothu (Tamil)',
     artistName: 'Rahul Sipligunj & Yazin Nizar',
@@ -191,6 +191,111 @@ Rowdy baby un mela thaane`
 Naatu naatu naatu koothu
 Kuthu pottu aadu machaan
 Naatu naatu naatu koothu`
+  },
+
+  'naatu koothu': {
+    trackName: 'Naatu Koothu (Tamil)',
+    artistName: 'Rahul Sipligunj & Yazin Nizar',
+    albumName: 'RRR',
+    duration: 215,
+    syncedLyrics: `[00:00.00] Naatu Koothu - RRR
+[00:04.00] M.M. Keeravaani
+[00:08.00] Pollaadha seyal ellaam
+[00:10.50] Ellorum paakka vandhu
+[00:13.50] Naatu koothu aadu machaan
+[00:16.00] Naatu naatu naatu koothu
+[00:19.00] Kuthu pottu aadu machaan
+[00:21.50] Naatu naatu naatu koothu
+[00:25.00] Thillalangadi aatam pottu
+[00:27.50] Thaaru maara thulli aadu
+[00:30.00] Naatu naatu naatu koothu!`,
+    plainLyrics: `Naatu koothu aadu machaan
+Naatu naatu naatu koothu
+Kuthu pottu aadu machaan
+Naatu naatu naatu koothu`
+  },
+
+  // Badass (Leo)
+  'badass': {
+    trackName: 'Badass - Leo',
+    artistName: 'Anirudh Ravichander',
+    albumName: 'Leo',
+    duration: 229,
+    syncedLyrics: `[00:00.00] Badass - Leo
+[00:04.00] Thalapathy Vijay | Anirudh Ravichander
+[00:09.00] Badass Mr Leo das is a badass
+[00:13.00] Leo Das is a badass
+[00:16.50] He's a frickin' bad ass!
+[00:20.00] Paaruda paaruda avan thaan Leo
+[00:23.50] Neruppaa eriyura avan thaan Leo
+[00:27.00] Singathai paatha vettai aada
+[00:30.00] Kaadu mulukka parakkura kodi
+[00:33.50] Badass Mr Leo das is a badass!`,
+    plainLyrics: `Badass Mr Leo das is a badass
+Leo Das is a badass
+He's a frickin' bad ass!
+Paaruda paaruda avan thaan Leo`
+  },
+
+  // Katchi Sera (Think Indie)
+  'katchi sera': {
+    trackName: 'Katchi Sera',
+    artistName: 'Sai Abhyankkar',
+    albumName: 'Think Indie',
+    duration: 188,
+    syncedLyrics: `[00:00.00] Katchi Sera
+[00:04.00] Sai Abhyankkar
+[00:08.00] En kooda nee serndha
+[00:10.50] Oor kooda katchi sera
+[00:13.00] En aasai unakku theriyuma?
+[00:16.00] Kannadi munnadi ninnu paathen
+[00:19.00] Un kooda serndhu naanum paarthen
+[00:22.50] Katchi sera koodi vaa
+[00:25.50] En nenjil vandhu aadi vaa!`,
+    plainLyrics: `En kooda nee serndha
+Oor kooda katchi sera
+En aasai unakku theriyuma?`
+  },
+
+  // Aasa Kooda (Think Indie)
+  'aasa kooda': {
+    trackName: 'Aasa Kooda',
+    artistName: 'Sai Abhyankkar & Sai Smriti',
+    albumName: 'Think Indie',
+    duration: 215,
+    syncedLyrics: `[00:00.00] Aasa Kooda
+[00:04.00] Sai Abhyankkar & Sai Smriti
+[00:08.00] Aasa kooda un mela
+[00:11.00] Paasa kooda un mela
+[00:14.00] Kaadhal nenjil poothirukku
+[00:17.50] Un paarvaikkaaga kaathirukku
+[00:21.00] Aasa kooda aasa kooda
+[00:24.00] Un mela un mela!`,
+    plainLyrics: `Aasa kooda un mela
+Paasa kooda un mela
+Kaadhal nenjil poothirukku`
+  },
+
+  // Chinna Chinna Aasai (Roja)
+  'chinna chinna aasai': {
+    trackName: 'Chinna Chinna Aasai',
+    artistName: 'Minmini & A.R. Rahman',
+    albumName: 'Roja',
+    duration: 295,
+    syncedLyrics: `[00:00.00] Chinna Chinna Aasai - Roja
+[00:05.00] A.R. Rahman | Minmini | Vairamuthu
+[00:12.00] Chinna chinna aasai
+[00:15.50] Siragadikum aasai
+[00:19.00] Muthu muthu aasai
+[00:22.50] Mudindhu vaitha aasai
+[00:26.00] Vennilavu thottu muththamidum aasai
+[00:33.00] Ennai indha bhoomi sutri vara aasai
+[00:40.00] Chinna chinna aasai
+[00:43.50] Siragadikum aasai!`,
+    plainLyrics: `Chinna chinna aasai
+Siragadikum aasai
+Muthu muthu aasai
+Mudindhu vaitha aasai`
   },
 
   // Kandha Sashti Kavasam

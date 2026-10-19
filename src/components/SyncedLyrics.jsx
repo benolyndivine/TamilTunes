@@ -43,6 +43,12 @@ export default function SyncedLyrics({
   // Copy full lyrics (plain text without timestamps)
   const handleCopyPlainLyrics = (e) => {
     e?.stopPropagation();
+    if (lyricsData?.plainLyrics) {
+      navigator.clipboard?.writeText(lyricsData.plainLyrics);
+      setCopiedMode('plain');
+      setTimeout(() => setCopiedMode(null), 2000);
+      return;
+    }
     if (!parsedLines || parsedLines.length === 0) return;
     const textToCopy = parsedLines.map(line => line.text).join('\n');
     if (navigator.clipboard) {
@@ -64,8 +70,8 @@ export default function SyncedLyrics({
       return;
     }
 
-    if (lyricsData?.syncedLyrics) {
-      navigator.clipboard?.writeText(lyricsData.syncedLyrics).then(() => {
+    if (lyricsData?.syncedLyrics || lyricsData?.syncedRaw) {
+      navigator.clipboard?.writeText(lyricsData.syncedLyrics || lyricsData.syncedRaw).then(() => {
         setCopiedMode('lrc');
         setTimeout(() => setCopiedMode(null), 2000);
       });
@@ -104,7 +110,7 @@ export default function SyncedLyrics({
   const activeLrcContent = useMemo(() => {
     if (customLrcText) return customLrcText;
     if (!lyricsData) return null;
-    return lyricsData.syncedLyrics || lyricsData.plainLyrics || null;
+    return lyricsData.syncedLyrics || lyricsData.syncedRaw || lyricsData.plainLyrics || lyricsData.plain || null;
   }, [lyricsData, customLrcText]);
 
   const { lines: parsedLines, isSynced } = useMemo(() => {

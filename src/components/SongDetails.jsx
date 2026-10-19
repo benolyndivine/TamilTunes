@@ -19,6 +19,7 @@ import {
   Zap
 } from 'lucide-react';
 import { extractSongDetails } from '../utils/matchSong';
+import { resolveSongAudio } from '../services/musicMetadata';
 
 export default function SongDetails({
   song,
@@ -70,46 +71,123 @@ export default function SongDetails({
   };
 
   // Direct backend song download in full 320 kbps (no redirect, native file download)
-  const handleDownloadSong = () => {
+  const handleDownloadSong = async () => {
     setIsDownloadingSong(true);
+    try {
+      let targetUrl = song.downloadUrl || (song.isFullAudio ? song.audioUrl : '');
 
-    // Prefer downloadUrl (direct CDN 320kbps) over audioUrl (stream proxy)
-    const bestAudioUrl = song.downloadUrl || song.audioUrl || '';
-    const downloadEndpoint = `/api/download/song?audioUrl=${encodeURIComponent(bestAudioUrl)}&title=${encodeURIComponent(displayTitle)}&artist=${encodeURIComponent(song.artist || '')}&album=${encodeURIComponent(albumOrMovie)}`;
+      // If not yet resolved to full 320kbps audio, resolve it first!
+      if (!targetUrl || targetUrl.includes('preview') || targetUrl.includes('apple.com') || targetUrl.includes('mzstatic.com')) {
+        try {
+          const resolved = await resolveSongAudio(displayTitle, song.artist, albumOrMovie);
+          if (resolved && resolved.url) {
+            targetUrl = resolved.url;
+          }
+        } catch (e) {
+          console.warn('Resolve error during download:', e);
+        }
+      }
 
-    const link = document.createElement('a');
-    link.href = downloadEndpoint;
-    link.setAttribute('download', `${displayTitle} (320kbps).mp3`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const cleanFilename = `${displayTitle.replace(/[<>:"/\\|?*]/g, '')} (320kbps).mp3`;
+      const downloadEndpoint = `/api/download/song?audioUrl=${encodeURIComponent(targetUrl || '')}&title=${encodeURIComponent(displayTitle)}&artist=${encodeURIComponent(song.artist || '')}&album=${encodeURIComponent(albumOrMovie)}`;
 
-    setTimeout(() => {
-      setIsDownloadingSong(false);
-    }, 2000);
+      const link = document.createElement('a');
+      link.href = downloadEndpoint;
+      link.setAttribute('download', cleanFilename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Song download error:', err);
+    } finally {
+      setTimeout(() => {
+        setIsDownloadingSong(false);
+      }, 2500);
+    }
   };
 
-
-  // Direct backend cover artwork download (no redirect, native image download)
-  const handleDownloadCover = () => {
+  // Direct bulletproof cover artwork download with blob and canvas fallbacks
+  const handleDownloadCover = async () => {
     if (!song.artworkUrl) {
       alert('Cover artwork is unavailable for this track.');
       return;
     }
 
     setIsDownloadingCover(true);
-    const artworkEndpoint = `/api/download/artwork?url=${encodeURIComponent(song.artworkUrl)}&title=${encodeURIComponent(displayTitle)}`;
+    const cleanFilename = `${displayTitle.replace(/[<>:"/\\|?*]/g, '')} - Cover.jpg`;
 
-    const link = document.createElement('a');
-    link.href = artworkEndpoint;
-    link.setAttribute('download', `${displayTitle} - Cover.jpg`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      let blob = null;
 
-    setTimeout(() => {
+      // 1. Try direct CORS fetch (mzstatic and saavncdn both send Access-Control-Allow-Origin: *)
+      try {
+        const directRes = await fetch(song.artworkUrl, { mode: 'cors' });
+        if (directRes.ok) {
+          blob = await directRes.blob();
+        }
+      } catch (e) {
+        // Direct fetch failed, fallback to backend proxy
+      }
+
+      // 2. Fallback to backend artwork proxy endpoint
+      if (!blob) {
+        try {
+          const artworkEndpoint = `/api/download/artwork?url=${encodeURIComponent(song.artworkUrl)}&title=${encodeURIComponent(displayTitle)}`;
+          const proxyRes = await fetch(artworkEndpoint);
+          if (proxyRes.ok) {
+            blob = await proxyRes.blob();
+          }
+        } catch (e) {
+          // Proxy fetch failed, continue to canvas fallback
+        }
+      }
+
+      // 3. Fallback to offscreen canvas
+      if (!blob) {
+        try {
+          blob = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth || 600;
+                canvas.height = img.naturalHeight || 600;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas blob failed')), 'image/jpeg', 0.95);
+              } catch (err) {
+                reject(err);
+              }
+            };
+            img.onerror = reject;
+            img.src = song.artworkUrl;
+          });
+        } catch (e) {
+          // Canvas export failed
+        }
+      }
+
+      // 4. Trigger download with blob if available
+      if (blob) {
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.setAttribute('download', cleanFilename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+      } else {
+        // Last-resort fallback: open image in a new tab
+        window.open(song.artworkUrl, '_blank');
+      }
+    } catch (err) {
+      console.warn('Cover download error:', err);
+      window.open(song.artworkUrl, '_blank');
+    } finally {
       setIsDownloadingCover(false);
-    }, 1500);
+    }
   };
 
   return (

@@ -1,6 +1,6 @@
 import express from 'express';
 import axios from 'axios';
-import { resolveFull320Audio } from '../utils/resolve320Audio.js';
+import { resolveFull320Audio, decryptJioMediaUrl } from '../utils/resolve320Audio.js';
 
 const router = express.Router();
 
@@ -59,6 +59,7 @@ function normalizeItunesItem(item) {
     artworkUrl: highResArtwork || item.artworkUrl100 || '',
     thumbnailUrl: item.artworkUrl100 || '',
     audioUrl: item.previewUrl || '',
+    downloadUrl: '',
     isFullAudio: false,
     audioQuality: '320 Kbps HQ Audio',
     audioType: 'Preview Audio (Full 320kbps Available for Download)',
@@ -75,45 +76,58 @@ function normalizeItunesItem(item) {
 }
 
 /**
- * Normalizes JioSaavn autocomplete song item
+ * Normalizes JioSaavn search.getResults song item with decrypted full 320kbps audio
  */
-function normalizeSaavnItem(item) {
+function normalizeSaavnFullItem(item) {
+  const durationSec = parseInt(item.duration, 10) || 240;
   const highResImage = (item.image || '')
     .replace('50x50.jpg', '500x500.jpg')
     .replace('150x150.jpg', '500x500.jpg');
 
-  const more = item.more_info || {};
-  const audioPreview = more.vlink || '';
-  const singersList = (more.singers || more.primary_artists || item.description || '')
+  const fullAudioUrl = item.encrypted_media_url ? decryptJioMediaUrl(item.encrypted_media_url) : null;
+  const singersList = (item.singers || item.primary_artists || item.more_info?.singers || '')
     .split(',')
     .map(s => s.trim())
     .filter(Boolean);
 
-  const detectedMd = detectMusicDirector(`${item.music || ''} ${more.singers || ''} ${item.description || ''}`);
+  const cleanTitle = (item.song || item.title || 'Unknown Title')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, '&');
+
+  const cleanAlbum = (item.album || item.more_info?.album || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, '&');
+
+  const detectedMd = detectMusicDirector(`${item.music || ''} ${singersList.join(' ')} ${cleanTitle}`);
 
   return {
     id: `saavn-${item.id}`,
     sourceId: String(item.id),
-    title: item.title ? item.title.replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&') : 'Unknown Title',
-    artist: more.primary_artists || more.singers || item.description || 'Unknown Artist',
-    singers: singersList.length > 0 ? singersList : [item.description || 'Tamil Artist'],
+    title: cleanTitle,
+    artist: item.primary_artists || item.singers || 'Tamil Artist',
+    singers: singersList.length > 0 ? singersList : ['Tamil Artist'],
     musicDirector: detectedMd || item.music || '',
-    album: item.album || '',
+    album: cleanAlbum,
     year: item.year || '',
-    duration: 240, // typical Saavn preview estimate
-    durationFormatted: '4:00',
+    duration: durationSec,
+    durationFormatted: formatDuration(durationSec),
     artworkUrl: highResImage || item.image || '',
     thumbnailUrl: item.image || '',
-    audioUrl: audioPreview,
-    isFullAudio: false,
-    audioType: audioPreview ? 'JioSaavn Preview Audio (MP3)' : '',
+    audioUrl: fullAudioUrl || item.media_preview_url || '',
+    downloadUrl: fullAudioUrl || '',
+    isFullAudio: Boolean(fullAudioUrl),
+    audioQuality: '320 Kbps HQ Studio Audio',
+    audioType: fullAudioUrl ? '320 Kbps Full HQ Audio' : 'Audio Track',
+    has320Download: true,
     source: 'JioSaavn',
-    genre: more.language ? `${more.language.charAt(0).toUpperCase() + more.language.slice(1)} Music` : 'Tamil Music',
+    genre: item.language ? `${item.language.charAt(0).toUpperCase() + item.language.slice(1)} Music` : 'Tamil Music',
     externalUrls: {
-      jiosaavn: item.url || '',
-      spotify: `https://open.spotify.com/search/${encodeURIComponent(item.title || '')}`,
-      youtube: `https://music.youtube.com/search?q=${encodeURIComponent((item.title || '') + ' ' + (item.album || ''))}`,
-      appleMusic: `https://music.apple.com/in/search?term=${encodeURIComponent(item.title || '')}`
+      jiosaavn: item.perma_url || item.url || `https://www.jiosaavn.com/search/${encodeURIComponent(cleanTitle)}`,
+      spotify: `https://open.spotify.com/search/${encodeURIComponent(cleanTitle + ' ' + (item.primary_artists || ''))}`,
+      youtube: `https://music.youtube.com/search?q=${encodeURIComponent(cleanTitle + ' ' + cleanAlbum)}`,
+      appleMusic: `https://music.apple.com/in/search?term=${encodeURIComponent(cleanTitle)}`
     }
   };
 }
@@ -152,7 +166,26 @@ router.get('/search', async (req, res) => {
   const seenIds = new Set();
 
   try {
-    // 1. Fetch from iTunes Search API with country=IN (India) for rich Tamil music catalog
+    // 1. Fetch from JioSaavn search.getResults for full 320kbps audio catalog
+    const saavnPromise = axios.get('https://www.jiosaavn.com/api.php', {
+      params: {
+        __call: 'search.getResults',
+        _format: 'json',
+        _marker: '0',
+        p: 1,
+        n: Math.max(limit, 15),
+        q: query
+      },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      },
+      timeout: 7000
+    }).catch(err => {
+      console.warn('JioSaavn search warning:', err.message);
+      return { data: { results: [] } };
+    });
+
+    // 2. Fetch from iTunes Search API with country=IN (India) for rich catalog
     const itunesPromise = axios.get('https://itunes.apple.com/search', {
       params: {
         term: query,
@@ -167,32 +200,13 @@ router.get('/search', async (req, res) => {
       return { data: { results: [] } };
     });
 
-    // 2. Fetch from JioSaavn autocomplete for additional Indian/Tamil coverage
-    const saavnPromise = axios.get('https://www.jiosaavn.com/api.php', {
-      params: {
-        __call: 'autocomplete.get',
-        _format: 'json',
-        _marker: '0',
-        cc: 'in',
-        includeMetaTags: '1',
-        query: query
-      },
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      },
-      timeout: 6000
-    }).catch(err => {
-      console.warn('JioSaavn search warning:', err.message);
-      return { data: {} };
-    });
+    const [saavnRes, itunesRes] = await Promise.all([saavnPromise, itunesPromise]);
 
-    const [itunesRes, saavnRes] = await Promise.all([itunesPromise, saavnPromise]);
-
-    // Process iTunes results
-    if (itunesRes?.data?.results) {
-      for (const item of itunesRes.data.results) {
-        const norm = normalizeItunesItem(item);
-        const key = `${norm.title.toLowerCase()}_${norm.artist.toLowerCase()}`;
+    // Process JioSaavn results first (these have full 320kbps audio decrypted)
+    if (saavnRes?.data?.results) {
+      for (const item of saavnRes.data.results) {
+        const norm = normalizeSaavnFullItem(item);
+        const key = `${norm.title.toLowerCase().trim()}_${norm.artist.toLowerCase().trim()}`;
         if (!seenIds.has(key)) {
           seenIds.add(key);
           combinedResults.push(norm);
@@ -200,14 +214,28 @@ router.get('/search', async (req, res) => {
       }
     }
 
-    // Process JioSaavn results if available
-    if (saavnRes?.data?.songs?.data) {
-      for (const item of saavnRes.data.songs.data) {
-        const norm = normalizeSaavnItem(item);
-        const key = `${norm.title.toLowerCase()}_${norm.artist.toLowerCase()}`;
+    // Process iTunes results
+    if (itunesRes?.data?.results) {
+      for (const item of itunesRes.data.results) {
+        const norm = normalizeItunesItem(item);
+        const titleKey = norm.title.toLowerCase().replace(/\s*\(From\s+[^)]+\)/i, '').trim();
+        // Check if we already have a JioSaavn full audio match
+        const matchingSaavn = combinedResults.find(s =>
+          s.isFullAudio && (s.title.toLowerCase().includes(titleKey) || titleKey.includes(s.title.toLowerCase()))
+        );
+
+        if (matchingSaavn) {
+          // Enrich iTunes item with full 320 audio from matching JioSaavn track
+          norm.audioUrl = matchingSaavn.audioUrl;
+          norm.downloadUrl = matchingSaavn.downloadUrl;
+          norm.isFullAudio = true;
+          norm.audioQuality = '320 Kbps HQ Studio Audio';
+          norm.audioType = '320 Kbps Full HQ Audio';
+        }
+
+        const key = `${norm.title.toLowerCase().trim()}_${norm.artist.toLowerCase().trim()}`;
         if (!seenIds.has(key)) {
           seenIds.add(key);
-          // If the saavn result lacks audioUrl but an itunes preview exists with similar name, it will already be in list
           combinedResults.push(norm);
         }
       }
@@ -237,7 +265,7 @@ router.get('/search', async (req, res) => {
 
 /**
  * GET /api/songs/trending
- * Returns pre-fetched top Tamil songs for immediate home display
+ * Returns pre-fetched top Tamil songs with full 320kbps audio for immediate home display
  */
 router.get('/trending', async (req, res) => {
   const cacheKey = 'trending:tamil';
@@ -247,18 +275,43 @@ router.get('/trending', async (req, res) => {
   }
 
   try {
-    const resItunes = await axios.get('https://itunes.apple.com/search', {
+    // 1. Fetch top Tamil hits from JioSaavn with full 320kbps audio
+    const resSaavn = await axios.get('https://www.jiosaavn.com/api.php', {
       params: {
-        term: 'Anirudh Ravichander Tamil Hits',
-        country: 'IN',
-        media: 'music',
-        entity: 'song',
-        limit: 12
+        __call: 'search.getResults',
+        _format: 'json',
+        _marker: '0',
+        p: 1,
+        n: 14,
+        q: 'Latest Tamil Hits 2024'
       },
+      headers: { 'User-Agent': 'Mozilla/5.0' },
       timeout: 8000
+    }).catch(e => {
+      console.warn('JioSaavn trending fetch failed:', e.message);
+      return { data: { results: [] } };
     });
 
-    const results = (resItunes.data.results || []).map(normalizeItunesItem);
+    let results = [];
+    if (resSaavn?.data?.results && resSaavn.data.results.length > 0) {
+      results = resSaavn.data.results.map(normalizeSaavnFullItem);
+    }
+
+    // Fallback to iTunes if JioSaavn returned nothing
+    if (results.length === 0) {
+      const resItunes = await axios.get('https://itunes.apple.com/search', {
+        params: {
+          term: 'Anirudh Ravichander Tamil Hits',
+          country: 'IN',
+          media: 'music',
+          entity: 'song',
+          limit: 12
+        },
+        timeout: 8000
+      });
+      results = (resItunes.data.results || []).map(normalizeItunesItem);
+    }
+
     searchCache.set(cacheKey, {
       data: results,
       timestamp: Date.now()
@@ -500,7 +553,8 @@ router.get('/resolve', async (req, res) => {
         title: result.title || title,
         artist: result.artist || artist,
         album: result.album || album,
-        streamUrl: `/api/stream?url=${encodeURIComponent(result.url)}`
+        streamUrl: result.url,
+        proxyStreamUrl: `/api/stream?url=${encodeURIComponent(result.url)}`
       });
     }
     res.status(404).json({ error: 'Could not resolve full audio for this track' });
