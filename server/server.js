@@ -109,12 +109,9 @@ const isServerless = process.env.NETLIFY === 'true' ||
   Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
   Boolean(process.env.LAMBDA_TASK_ROOT);
 
-if (isServerless) {
-  // In serverless, static files are handled by Netlify CDN; Express only serves API
-  app.use((req, res) => {
-    res.status(404).json({ error: 'API route not found', path: req.originalUrl || req.url });
-  });
-} else {
+const isDirectRun = Boolean(process.argv[1] && path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1]));
+
+if (!isServerless && isDirectRun) {
   // Local Express static file server for production builds
   const distPath = path.join(__dirname, '../dist');
   app.use(express.static(distPath));
