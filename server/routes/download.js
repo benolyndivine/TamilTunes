@@ -4,6 +4,10 @@ import { resolveFull320Audio } from '../utils/resolve320Audio.js';
 
 const router = express.Router();
 
+const isServerless = process.env.NETLIFY === 'true' ||
+  Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+  Boolean(process.env.LAMBDA_TASK_ROOT);
+
 function sanitizeFilename(name = '') {
   return name
     .replace(/[<>:"/\\|?*]/g, '')
@@ -27,8 +31,10 @@ router.get('/song', async (req, res) => {
   // If audioUrl is already a verified full 320kbps stream, use it directly
   if (audioUrl && (audioUrl.includes('aac.saavncdn.com') || audioUrl.includes('_320.mp4'))) {
     isFull320 = true;
-  } else if (rawTitle) {
-    // Resolve full 320kbps audio stream if not already 320kbps
+  }
+
+  // If not yet 320kbps (or preview URL was passed), always resolve to full 320kbps!
+  if (!isFull320 && rawTitle) {
     try {
       const resolved = await resolveFull320Audio(rawTitle, rawArtist, rawAlbum);
       if (resolved && resolved.url) {
@@ -40,8 +46,11 @@ router.get('/song', async (req, res) => {
     }
   }
 
-  if (!audioUrl) {
-    return res.status(400).json({ error: 'Audio source unavailable for direct download' });
+  // Never stream a 30-second preview as a download!
+  if (!audioUrl || !isFull320) {
+    return res.status(404).json({
+      error: 'Full length 320kbps audio stream unavailable for direct download'
+    });
   }
 
   const cleanTitle = sanitizeFilename(rawTitle);
@@ -51,6 +60,12 @@ router.get('/song', async (req, res) => {
     : `${cleanTitle} (320kbps).mp3`;
 
   const safeAsciiFilename = filename.replace(/[^\x20-\x7E]/g, '').replace(/"/g, '');
+
+  // In Serverless (Netlify / Lambda), streaming >6MB payloads returns 502 Bad Gateway.
+  // Redirecting 302 to the high-speed CDN allows the browser to download the complete 320kbps file natively.
+  if (isServerless || req.query.mode === 'redirect') {
+    return res.redirect(302, audioUrl);
+  }
 
   try {
     const response = await axios({

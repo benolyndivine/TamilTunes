@@ -7,6 +7,7 @@ import SyncedLyrics from '../components/SyncedLyrics';
 import DownloadSources from '../components/DownloadSources';
 import MusicPlayer from '../components/MusicPlayer';
 import Loading from '../components/Loading';
+import ErrorMessage from '../components/ErrorMessage';
 import AlbumView from '../components/AlbumView';
 import MobileBottomNav from '../components/MobileBottomNav';
 
@@ -188,7 +189,7 @@ export default function Home() {
     loadDownloadSources(song);
 
     // If song already has full 320kbps audio, play immediately if requested
-    if (song.isFullAudio && song.audioUrl) {
+    if (song.isFullAudio && song.audioUrl && !song.audioUrl.includes('preview') && !song.audioUrl.includes('apple.com')) {
       if (shouldAutoPlay) {
         player.playTrack(song, songs);
       }
@@ -296,12 +297,12 @@ export default function Home() {
     }
 
     // If song is already enriched with full audio (or selectedSong matches and is full), play directly
-    if (song.isFullAudio && song.audioUrl) {
+    if (song.isFullAudio && song.audioUrl && !song.audioUrl.includes('preview') && !song.audioUrl.includes('apple.com')) {
       setSelectedSong(song);
       player.playTrack(song, songs);
       loadSongLyrics(song);
       loadDownloadSources(song);
-    } else if (selectedSong && selectedSong.id === song.id && selectedSong.isFullAudio) {
+    } else if (selectedSong && selectedSong.id === song.id && selectedSong.isFullAudio && !selectedSong.audioUrl.includes('preview') && !selectedSong.audioUrl.includes('apple.com')) {
       player.playTrack(selectedSong, songs);
       loadSongLyrics(selectedSong);
       loadDownloadSources(selectedSong);

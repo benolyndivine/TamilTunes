@@ -88,13 +88,38 @@ export default function AlbumView({
     document.body.removeChild(link);
   };
 
-  // Direct backend full 320kbps song download
-  const handleDownloadSong = (song) => {
+  // Direct full 320kbps song download
+  const handleDownloadSong = async (song) => {
     if (!song) return;
-    const downloadEndpoint = `/api/download/song?title=${encodeURIComponent(song.title)}&artist=${encodeURIComponent(song.artist || displayAlbum.artist || '')}&album=${encodeURIComponent(displayAlbum.title || '')}`;
+    const cleanFilename = `${song.title.replace(/[<>:"/\\|?*]/g, '')} (320kbps).mp3`;
+    const targetUrl = song.downloadUrl || (song.isFullAudio ? song.audioUrl : '');
+
+    // 1. Direct High-Speed Blob Download
+    if (targetUrl && (targetUrl.includes('saavncdn.com') || targetUrl.includes('_320.mp4'))) {
+      try {
+        const cdnRes = await fetch(targetUrl);
+        if (cdnRes.ok) {
+          const blob = await cdnRes.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = cleanFilename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+          return;
+        }
+      } catch (fetchErr) {
+        console.warn('Direct CDN fetch failed in album view, falling back to endpoint:', fetchErr);
+      }
+    }
+
+    // 2. Fallback to /api/download/song
+    const downloadEndpoint = `/api/download/song?audioUrl=${encodeURIComponent(targetUrl || '')}&title=${encodeURIComponent(song.title)}&artist=${encodeURIComponent(song.artist || displayAlbum.artist || '')}&album=${encodeURIComponent(displayAlbum.title || '')}`;
     const link = document.createElement('a');
     link.href = downloadEndpoint;
-    link.setAttribute('download', `${song.title} (320kbps).mp3`);
+    link.setAttribute('download', cleanFilename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

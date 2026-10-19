@@ -452,42 +452,97 @@ router.get('/album-details', async (req, res) => {
     let tracks = [];
     let albumMeta = null;
 
-    // If it's an iTunes album ID or starts with itunes-
-    const cleanId = String(collectionId || '').replace('itunes-', '');
-    if (cleanId && !isNaN(cleanId)) {
-      const itunesRes = await axios.get(`https://itunes.apple.com/lookup`, {
-        params: {
-          id: cleanId,
-          entity: 'song',
-          country: 'IN'
-        },
-        timeout: 8000
-      });
+    // 1. Try JioSaavn album search / lookup first for full 320kbps tracks
+    const saavnSearchTerm = (albumTitle || collectionId || '').replace(/^(itunes-album-|itunes-|saavn-)/, '').trim();
+    if (saavnSearchTerm) {
+      try {
+        const sRes = await axios.get('https://www.jiosaavn.com/api.php', {
+          params: {
+            __call: 'search.getAlbumResults',
+            _format: 'json',
+            p: 1,
+            n: 3,
+            q: saavnSearchTerm
+          },
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          timeout: 7000
+        });
 
-      const results = itunesRes.data?.results || [];
-      const albumItem = results.find(x => x.wrapperType === 'collection');
-      const songItems = results.filter(x => x.wrapperType === 'track');
+        const albumItem = sRes.data?.results?.[0];
+        const albumId = albumItem?.albumid || albumItem?.id;
+        if (albumId) {
+          const dRes = await axios.get('https://www.jiosaavn.com/api.php', {
+            params: {
+              __call: 'content.getAlbumDetails',
+              _format: 'json',
+              albumid: albumId
+            },
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            timeout: 8000
+          });
 
-      if (albumItem) {
-        const highResArtwork = (albumItem.artworkUrl100 || '')
-          .replace('100x100bb.jpg', '600x600bb.jpg')
-          .replace('100x100', '600x600');
-        albumMeta = {
-          id: `itunes-${albumItem.collectionId}`,
-          title: albumItem.collectionName,
-          artist: albumItem.artistName,
-          year: albumItem.releaseDate ? new Date(albumItem.releaseDate).getFullYear().toString() : '',
-          trackCount: albumItem.trackCount,
-          artworkUrl: highResArtwork,
-          genre: albumItem.primaryGenreName,
-          copyright: albumItem.copyright
-        };
+          const saavnSongs = dRes.data?.songs || dRes.data?.list || [];
+          if (saavnSongs.length > 0) {
+            tracks = saavnSongs.map(normalizeSaavnFullItem);
+            const highRes = (dRes.data?.image || albumItem?.image || '')
+              .replace('150x150.jpg', '500x500.jpg')
+              .replace('50x50.jpg', '500x500.jpg');
+
+            albumMeta = {
+              id: `saavn-${albumId}`,
+              title: (dRes.data?.title || dRes.data?.name || albumTitle || '').replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&'),
+              artist: dRes.data?.primary_artists || albumArtist || 'Tamil Soundtrack',
+              year: dRes.data?.year || albumItem?.year || '',
+              trackCount: tracks.length,
+              artworkUrl: highRes || albumItem?.image,
+              genre: 'Tamil Soundtrack',
+              source: 'JioSaavn'
+            };
+          }
+        }
+      } catch (saavnErr) {
+        console.warn('JioSaavn album lookup failed, trying iTunes:', saavnErr.message);
       }
-
-      tracks = songItems.map(item => normalizeItunesItem(item));
     }
 
-    // Fallback if iTunes ID didn't return tracks: search songs matching albumTitle
+    // 2. If JioSaavn didn't return tracks, fallback to iTunes lookup
+    if (!tracks.length) {
+      const cleanId = String(collectionId || '').replace('itunes-', '');
+      if (cleanId && !isNaN(cleanId)) {
+        const itunesRes = await axios.get(`https://itunes.apple.com/lookup`, {
+          params: {
+            id: cleanId,
+            entity: 'song',
+            country: 'IN'
+          },
+          timeout: 8000
+        });
+
+        const results = itunesRes.data?.results || [];
+        const itunesAlbumItem = results.find(x => x.wrapperType === 'collection');
+        const songItems = results.filter(x => x.wrapperType === 'track');
+
+        if (itunesAlbumItem) {
+          const highResArtwork = (itunesAlbumItem.artworkUrl100 || '')
+            .replace('100x100bb.jpg', '600x600bb.jpg')
+            .replace('100x100', '600x600');
+          albumMeta = {
+            id: `itunes-${itunesAlbumItem.collectionId}`,
+            title: itunesAlbumItem.collectionName,
+            artist: itunesAlbumItem.artistName,
+            year: itunesAlbumItem.releaseDate ? new Date(itunesAlbumItem.releaseDate).getFullYear().toString() : '',
+            trackCount: itunesAlbumItem.trackCount,
+            artworkUrl: highResArtwork,
+            genre: itunesAlbumItem.primaryGenreName,
+            copyright: itunesAlbumItem.copyright
+          };
+        }
+
+        tracks = songItems.map(item => normalizeItunesItem(item));
+      }
+    }
+
+    // 3. Fallback if still no tracks: search iTunes songs matching albumTitle
     if (!tracks.length && albumTitle) {
       const searchRes = await axios.get('https://itunes.apple.com/search', {
         params: {
