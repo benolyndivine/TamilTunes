@@ -13,12 +13,14 @@ import {
   Layers,
   ExternalLink,
   X,
-  FileText
+  FileText,
+  Film
 } from 'lucide-react';
 import { getAlbumDetails } from '../services/musicMetadata';
 import { getLyrics } from '../services/lyricsService';
 import { downloadSongFile, downloadCoverImage } from '../utils/downloadHelper';
 import Loading from './Loading';
+import SpotifyCanvasModal from './SpotifyCanvasModal';
 
 export default function AlbumView({
   album,
@@ -35,6 +37,7 @@ export default function AlbumView({
   const [imageError, setImageError] = useState(false);
   const [isDownloadingCover, setIsDownloadingCover] = useState(false);
   const [coverDownloaded, setCoverDownloaded] = useState(false);
+  const [isCanvasModalOpen, setIsCanvasModalOpen] = useState(false);
 
   // Selected song details inside album view modal
   const [inspectedSong, setInspectedSong] = useState(null);
@@ -626,6 +629,17 @@ export default function AlbumView({
                     </>
                   )}
                 </button>
+
+                {/* Spotify Canvas Video Button (1080p 60fps) */}
+                <button
+                  type="button"
+                  onClick={() => setIsCanvasModalOpen(true)}
+                  className="col-span-2 p-2.5 rounded-xl bg-gradient-to-r from-emerald-600/90 to-teal-600/90 hover:from-emerald-500 hover:to-teal-500 text-white font-bold flex items-center justify-center space-x-1.5 shadow-md transition"
+                  title="Download Spotify Canvas Video in 1080p 60fps"
+                >
+                  <Film className="w-4 h-4 text-emerald-300" />
+                  <span>Spotify Canvas (1080p 60fps)</span>
+                </button>
               </div>
             </div>
 
@@ -656,6 +670,12 @@ export default function AlbumView({
           </div>
         </div>
       )}
+      {/* Spotify Canvas Downloader Modal */}
+      <SpotifyCanvasModal
+        isOpen={isCanvasModalOpen}
+        onClose={() => setIsCanvasModalOpen(false)}
+        initialSong={inspectedSong}
+      />
     </div>
   );
 }

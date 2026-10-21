@@ -268,3 +268,70 @@ export async function downloadSongFile(song) {
 
   return { success: false, error: 'Could not obtain full audio download stream' };
 }
+
+/**
+ * Downloads a Spotify Canvas video (1080p 60fps MP4)
+ * Multi-tier download strategy:
+ * Tier 1: Direct in-browser CORS Blob download from Spotify CDN (canvaz.scdn.co has Access-Control-Allow-Origin: *)
+ * Tier 2: Backend proxy fetch (/api/download/canvas) as Blob
+ * Tier 3: Direct anchor tag download
+ * Tier 4: Direct new window fallback
+ *
+ * @param {string} canvasUrl The direct Spotify canvas MP4 video URL
+ * @param {string} title The song/track title for the filename
+ * @returns {Promise<{ success: boolean, method?: string, error?: string }>}
+ */
+export async function downloadCanvasVideo(canvasUrl, title = 'Track') {
+  if (!canvasUrl) {
+    return { success: false, error: 'No Canvas video URL provided' };
+  }
+
+  const cleanTitle = sanitizeFilename(title || 'Track');
+  const filename = `${cleanTitle} - Spotify Canvas (1080p 60fps).mp4`;
+
+  // Tier 1: Direct in-browser CORS fetch with Blob (canvaz.scdn.co allows Origin: *)
+  try {
+    const res = await fetch(canvasUrl, { mode: 'cors' });
+    if (res.ok) {
+      const blob = await res.blob();
+      if (blob && blob.size > 5000) {
+        triggerBlobDownload(blob, filename);
+        return { success: true, method: 'direct-cors-blob' };
+      }
+    }
+  } catch (err) {
+    console.warn('Direct canvas video CORS fetch failed, falling back to proxy:', err);
+  }
+
+  // Tier 2: Backend proxy fetch (/api/download/canvas)
+  try {
+    const proxyUrl = `/api/download/canvas?url=${encodeURIComponent(canvasUrl)}&title=${encodeURIComponent(cleanTitle)}`;
+    const proxyRes = await fetch(proxyUrl);
+    if (proxyRes.ok) {
+      const blob = await proxyRes.blob();
+      if (blob && blob.size > 5000) {
+        triggerBlobDownload(blob, filename);
+        return { success: true, method: 'backend-proxy-blob' };
+      }
+    }
+  } catch (proxyErr) {
+    console.warn('Backend proxy blob fetch failed, falling back to anchor:', proxyErr);
+  }
+
+  // Tier 3: Direct anchor download
+  try {
+    const a = document.createElement('a');
+    a.href = `/api/download/canvas?url=${encodeURIComponent(canvasUrl)}&title=${encodeURIComponent(cleanTitle)}`;
+    a.setAttribute('download', filename);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    return { success: true, method: 'backend-anchor' };
+  } catch (anchorErr) {
+    console.warn('Backend anchor trigger failed:', anchorErr);
+  }
+
+  // Tier 4: Direct window navigation fallback
+  window.open(canvasUrl, '_blank');
+  return { success: true, method: 'direct-window' };
+}

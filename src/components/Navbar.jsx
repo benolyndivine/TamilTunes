@@ -1,7 +1,7 @@
 import React from 'react';
-import { Music2, Disc3, Sparkles, Radio, HelpCircle } from 'lucide-react';
+import { Music2, Disc3, Sparkles, Radio, HelpCircle, Film } from 'lucide-react';
 
-export default function Navbar({ onOpenAbout, activeTab = 'songs', onTabChange }) {
+export default function Navbar({ onOpenAbout, onOpenCanvas, activeTab = 'songs', onTabChange }) {
   return (
     <header className="sticky top-0 z-40 w-full backdrop-blur-xl bg-slate-950/80 border-b border-slate-800/80 transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -66,6 +66,18 @@ export default function Navbar({ onOpenAbout, activeTab = 'songs', onTabChange }
             <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
             <span>தமிழ் / English</span>
           </div>
+
+          {/* Spotify Canvas Downloader Button */}
+          <button
+            type="button"
+            onClick={onOpenCanvas}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-600/20 to-teal-600/20 hover:from-emerald-600/30 hover:to-teal-600/30 text-emerald-300 border border-emerald-500/30 transition shadow-sm"
+            title="Download Spotify Canvas Video in 1080p 60fps (~30s loop)"
+          >
+            <Film className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Spotify Canvas (1080p)</span>
+            <span className="sm:hidden">Canvas</span>
+          </button>
 
           <button
             onClick={onOpenAbout}

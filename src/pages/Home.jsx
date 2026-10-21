@@ -10,6 +10,7 @@ import Loading from '../components/Loading';
 import ErrorMessage from '../components/ErrorMessage';
 import AlbumView from '../components/AlbumView';
 import MobileBottomNav from '../components/MobileBottomNav';
+import SpotifyCanvasModal from '../components/SpotifyCanvasModal';
 
 import { searchSongs, getTrendingSongs, resolveSongAudio, searchAlbums } from '../services/musicMetadata';
 import { getLyrics } from '../services/lyricsService';
@@ -54,6 +55,7 @@ export default function Home() {
 
   // Modal state
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const [showCanvasModal, setShowCanvasModal] = useState(false);
 
   // Refs for smooth scroll
   const lyricsSectionRef = useRef(null);
@@ -333,6 +335,7 @@ export default function Home() {
       {/* Top Navigation */}
       <Navbar
         onOpenAbout={() => setShowAboutModal(true)}
+        onOpenCanvas={() => setShowCanvasModal(true)}
         activeTab={activeTab}
         onTabChange={(tab) => {
           setActiveTab(tab);
@@ -680,6 +683,13 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Global Spotify Canvas Downloader Modal */}
+      <SpotifyCanvasModal
+        isOpen={showCanvasModal}
+        onClose={() => setShowCanvasModal(false)}
+        initialSong={selectedSong}
+      />
     </div>
   );
 }

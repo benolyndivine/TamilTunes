@@ -16,11 +16,13 @@ import {
   Copy,
   Image as ImageIcon,
   CheckCheck,
-  Zap
+  Zap,
+  Film
 } from 'lucide-react';
 import { extractSongDetails } from '../utils/matchSong';
 import { resolveSongAudio } from '../services/musicMetadata';
 import { downloadSongFile, downloadCoverImage } from '../utils/downloadHelper';
+import SpotifyCanvasModal from './SpotifyCanvasModal';
 
 export default function SongDetails({
   song,
@@ -36,6 +38,7 @@ export default function SongDetails({
   const [copiedText, setCopiedText] = useState(null);
   const [isDownloadingSong, setIsDownloadingSong] = useState(false);
   const [isDownloadingCover, setIsDownloadingCover] = useState(false);
+  const [isCanvasModalOpen, setIsCanvasModalOpen] = useState(false);
 
 
   if (!song) return null;
@@ -285,6 +288,17 @@ export default function SongDetails({
               <span>{isDownloadingCover ? 'Saving Cover...' : 'Download Cover'}</span>
             </button>
 
+            {/* Spotify Canvas Video Button (1080p 60fps) */}
+            <button
+              type="button"
+              onClick={() => setIsCanvasModalOpen(true)}
+              className="flex items-center space-x-2 px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-600/90 to-teal-600/90 hover:from-emerald-500 hover:to-teal-500 text-white text-sm font-bold shadow-lg shadow-emerald-950/40 border border-emerald-500/30 transition transform active:scale-95"
+              title="Download official Spotify Canvas video in 1080p 60fps (~30s loop)"
+            >
+              <Film className="w-4 h-4 text-emerald-300" />
+              <span>Spotify Canvas (1080p 60fps)</span>
+            </button>
+
             {/* Copy Song Name Only Button */}
             <button
               type="button"
@@ -356,6 +370,13 @@ export default function SongDetails({
           </div>
         </div>
       </div>
+
+      {/* Spotify Canvas Downloader Modal */}
+      <SpotifyCanvasModal
+        isOpen={isCanvasModalOpen}
+        onClose={() => setIsCanvasModalOpen(false)}
+        initialSong={song}
+      />
     </div>
   );
 }

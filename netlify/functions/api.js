@@ -954,7 +954,175 @@ export const handler = async (event, context) => {
       }
     }
 
-    // 9. Stream proxy
+    // 9. Resolve Spotify Canvas Video
+    if (path === '/download/canvas/resolve' || path === '/spotify/canvas') {
+      const urlParam = query.url || query.link || query.spotifyUrl || '';
+      const trackIdParam = query.trackId || query.id || '';
+      const rawTitle = query.title || '';
+      const rawArtist = query.artist || '';
+
+      let trackId = null;
+      const combined = `${urlParam} ${trackIdParam}`.trim();
+      const match = combined.match(/track[\/:]([a-zA-Z0-9]{22})/i);
+      if (match) {
+        trackId = match[1];
+      } else if (/^[a-zA-Z0-9]{22}$/.test(trackIdParam.trim())) {
+        trackId = trackIdParam.trim();
+      } else if (/^[a-zA-Z0-9]{22}$/.test(urlParam.trim())) {
+        trackId = urlParam.trim();
+      }
+
+      // If trackId not directly passed, attempt search by artist/title
+      if (!trackId && (rawArtist || rawTitle)) {
+        try {
+          const q = (rawArtist || rawTitle).trim();
+          const searchRes = await axios.get(`https://canvasdownloader.com/api/search?q=${encodeURIComponent(q)}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            timeout: 5000
+          });
+          if (searchRes.data?.artists?.length > 0) {
+            const slug = searchRes.data.artists[0].slug;
+            const artistPageRes = await axios.get(`https://canvasdownloader.com/artists/${slug}`, {
+              headers: { 'User-Agent': 'Mozilla/5.0' },
+              timeout: 6000
+            });
+            const vMatch = artistPageRes.data.match(/<source src="([^"]+\.cnvs\.mp4[^"]*)"/i);
+            if (vMatch) {
+              const canvasUrl = vMatch[1].replace('#t=0.001', '');
+              return {
+                statusCode: 200,
+                headers: CORS_HEADERS,
+                body: JSON.stringify({
+                  success: true,
+                  hasCanvas: true,
+                  canvasUrl,
+                  title: rawTitle || searchRes.data.artists[0].name,
+                  resolution: '1080p (1080x1920 Full HD)',
+                  aspectRatio: '9:16 Vertical Portrait',
+                  fps: 60,
+                  format: 'MP4'
+                })
+              };
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (!trackId) {
+        return {
+          statusCode: 400,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({
+            success: false,
+            hasCanvas: false,
+            error: 'A valid Spotify track URL (e.g. https://open.spotify.com/track/...) or 22-character track ID is required.'
+          })
+        };
+      }
+
+      try {
+        const spotifyTrackUrl = `https://open.spotify.com/track/${trackId}`;
+        const scraperUrl = `https://canvasdownloader.com/canvas?link=${encodeURIComponent(spotifyTrackUrl)}`;
+
+        const res = await axios.get(scraperUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+          },
+          timeout: 9000
+        });
+
+        const html = String(res.data || '');
+        if (html.includes('Canvas not found')) {
+          return {
+            statusCode: 200,
+            headers: CORS_HEADERS,
+            body: JSON.stringify({
+              success: false,
+              hasCanvas: false,
+              trackId,
+              error: 'No Spotify Canvas video is available for this track on Spotify.'
+            })
+          };
+        }
+
+        const videoMatch = html.match(/(https:\/\/canvaz\.scdn\.co\/upload\/[^\s"'<>]+)/i) ||
+                           html.match(/<source[^>]+src="([^"]+\.cnvs\.mp4[^"]*)"/i);
+
+        if (!videoMatch) {
+          return {
+            statusCode: 200,
+            headers: CORS_HEADERS,
+            body: JSON.stringify({
+              success: false,
+              hasCanvas: false,
+              trackId,
+              error: 'Canvas video stream not found in Spotify response.'
+            })
+          };
+        }
+
+        const canvasUrl = videoMatch[1].replace('#t=0.001', '');
+        const titleMatch = html.match(/<title>([\s\S]*?)·\s*Canvas Downloader/i);
+        const resolvedTitle = titleMatch ? titleMatch[1].replace('Canvas by ', '').trim() : (rawTitle || 'Spotify Track');
+
+        return {
+          statusCode: 200,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({
+            success: true,
+            hasCanvas: true,
+            trackId,
+            title: resolvedTitle,
+            canvasUrl,
+            resolution: '1080p (1080x1920 Full HD)',
+            aspectRatio: '9:16 Vertical Portrait',
+            fps: 60,
+            format: 'MP4'
+          })
+        };
+      } catch (err) {
+        console.error('Spotify Canvas resolve error:', err.message);
+        return {
+          statusCode: 500,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({
+            success: false,
+            error: 'Failed to resolve Canvas from Spotify: ' + err.message
+          })
+        };
+      }
+    }
+
+    // 10. Download Spotify Canvas Video
+    if (path === '/download/canvas') {
+      const videoUrl = query.url;
+      const rawTitle = query.title || 'Spotify Track';
+
+      if (!videoUrl) {
+        return {
+          statusCode: 400,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({ error: 'url parameter is required' })
+        };
+      }
+
+      const cleanTitle = rawTitle.replace(/[<>:"/\\|?*]/g, '').trim();
+      const filename = `${cleanTitle || 'Track'} - Spotify Canvas (1080p 60fps).mp4`;
+      const safeAscii = filename.replace(/[^\x20-\x7E]/g, '').replace(/"/g, '');
+
+      return {
+        statusCode: 302,
+        headers: {
+          ...CORS_HEADERS,
+          'Location': videoUrl,
+          'Content-Disposition': `attachment; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+        },
+        body: ''
+      };
+    }
+
+    // 11. Stream proxy
     if (path === '/stream') {
       const targetUrl = query.url;
       if (!targetUrl) {

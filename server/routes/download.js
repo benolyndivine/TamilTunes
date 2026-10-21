@@ -196,4 +196,174 @@ router.get('/artwork', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/download/canvas/resolve
+ * Resolves Spotify Canvas video stream and metadata
+ */
+router.get('/canvas/resolve', async (req, res) => {
+  const urlParam = req.query.url || req.query.link || req.query.spotifyUrl || '';
+  const trackIdParam = req.query.trackId || req.query.id || '';
+  const rawTitle = req.query.title || '';
+  const rawArtist = req.query.artist || '';
+
+  let trackId = null;
+  const combined = `${urlParam} ${trackIdParam}`.trim();
+  const match = combined.match(/track[\/:]([a-zA-Z0-9]{22})/i);
+  if (match) {
+    trackId = match[1];
+  } else if (/^[a-zA-Z0-9]{22}$/.test(trackIdParam.trim())) {
+    trackId = trackIdParam.trim();
+  } else if (/^[a-zA-Z0-9]{22}$/.test(urlParam.trim())) {
+    trackId = urlParam.trim();
+  }
+
+  // Fallback search by artist/title if trackId not provided
+  if (!trackId && (rawArtist || rawTitle)) {
+    try {
+      const q = (rawArtist || rawTitle).trim();
+      const searchRes = await axios.get(`https://canvasdownloader.com/api/search?q=${encodeURIComponent(q)}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 5000
+      });
+      if (searchRes.data?.artists?.length > 0) {
+        const slug = searchRes.data.artists[0].slug;
+        const artistPageRes = await axios.get(`https://canvasdownloader.com/artists/${slug}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          timeout: 6000
+        });
+        const vMatch = artistPageRes.data.match(/<source src="([^"]+\.cnvs\.mp4[^"]*)"/i);
+        if (vMatch) {
+          const canvasUrl = vMatch[1].replace('#t=0.001', '');
+          return res.json({
+            success: true,
+            hasCanvas: true,
+            canvasUrl,
+            title: rawTitle || searchRes.data.artists[0].name,
+            resolution: '1080p (1080x1920 Full HD)',
+            aspectRatio: '9:16 Vertical Portrait',
+            fps: 60,
+            format: 'MP4'
+          });
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (!trackId) {
+    return res.status(400).json({
+      success: false,
+      hasCanvas: false,
+      error: 'A valid Spotify track URL or 22-character track ID is required.'
+    });
+  }
+
+  try {
+    const spotifyTrackUrl = `https://open.spotify.com/track/${trackId}`;
+    const scraperUrl = `https://canvasdownloader.com/canvas?link=${encodeURIComponent(spotifyTrackUrl)}`;
+
+    const response = await axios.get(scraperUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
+      timeout: 10000
+    });
+
+    const html = String(response.data || '');
+    if (html.includes('Canvas not found')) {
+      return res.json({
+        success: false,
+        hasCanvas: false,
+        trackId,
+        error: 'No Spotify Canvas video is available for this track on Spotify.'
+      });
+    }
+
+    const videoMatch = html.match(/(https:\/\/canvaz\.scdn\.co\/upload\/[^\s"'<>]+)/i) ||
+                       html.match(/<source[^>]+src="([^"]+\.cnvs\.mp4[^"]*)"/i);
+
+    if (!videoMatch) {
+      return res.json({
+        success: false,
+        hasCanvas: false,
+        trackId,
+        error: 'Canvas video stream not found in Spotify response.'
+      });
+    }
+
+    const canvasUrl = videoMatch[1].replace('#t=0.001', '');
+    const titleMatch = html.match(/<title>([\s\S]*?)·\s*Canvas Downloader/i);
+    const resolvedTitle = titleMatch ? titleMatch[1].replace('Canvas by ', '').trim() : (rawTitle || 'Spotify Track');
+
+    return res.json({
+      success: true,
+      hasCanvas: true,
+      trackId,
+      title: resolvedTitle,
+      canvasUrl,
+      resolution: '1080p (1080x1920 Full HD)',
+      aspectRatio: '9:16 Vertical Portrait',
+      fps: 60,
+      format: 'MP4'
+    });
+  } catch (err) {
+    console.error('Spotify Canvas resolve error:', err.message);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to resolve Canvas from Spotify: ' + err.message
+    });
+  }
+});
+
+/**
+ * GET /api/download/canvas
+ * Downloads the high-resolution 1080p 60fps Spotify Canvas video as an attachment
+ */
+router.get('/canvas', async (req, res) => {
+  const videoUrl = req.query.url;
+  const rawTitle = req.query.title || 'Track';
+
+  if (!videoUrl) {
+    return res.status(400).json({ error: 'url parameter is required for canvas download' });
+  }
+
+  const cleanTitle = sanitizeFilename(rawTitle);
+  const filename = `${cleanTitle || 'Track'} - Spotify Canvas (1080p 60fps).mp4`;
+  const safeAscii = filename.replace(/[^\x20-\x7E]/g, '').replace(/"/g, '');
+
+  try {
+    const response = await axios({
+      method: 'GET',
+      url: videoUrl,
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+      },
+      timeout: 20000
+    });
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+
+    response.data.pipe(res);
+
+    response.data.on('error', (err) => {
+      console.error('Canvas stream pipe error:', err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed during canvas streaming' });
+      }
+    });
+  } catch (err) {
+    console.error('Download canvas error:', err.message);
+    if (!res.headersSent) {
+      res.redirect(videoUrl);
+    }
+  }
+});
+
 export default router;
