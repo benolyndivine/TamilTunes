@@ -144,7 +144,7 @@ export default function SearchBar({
       <div className="space-y-1.5 pt-1">
         <div className="flex items-center space-x-1.5 text-xs text-slate-400">
           <Flame className="w-3.5 h-3.5 text-amber-400" />
-          <span className="font-semibold text-slate-300">Popular Tamil Searches:</span>
+          <span className="font-semibold text-slate-300">Popular Tamil</span>
         </div>
 
         <div className="flex items-center flex-wrap gap-1.5">
