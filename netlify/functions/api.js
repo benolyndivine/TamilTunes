@@ -876,7 +876,85 @@ export const handler = async (event, context) => {
       };
     }
 
-    // 8. Stream proxy
+    // 8. Download Cover Artwork
+    if (path === '/download/artwork') {
+      const imageUrl = query.url || query.imageUrl || query.artworkUrl;
+      const rawTitle = query.title || query.album || 'Cover';
+
+      if (!imageUrl) {
+        return {
+          statusCode: 400,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({ error: 'url parameter is required for artwork download' })
+        };
+      }
+
+      // Upgrade artwork to high resolution
+      const highResUrl = imageUrl
+        .replace('150x150.jpg', '500x500.jpg')
+        .replace('50x50.jpg', '500x500.jpg')
+        .replace('100x100bb.jpg', '600x600bb.jpg')
+        .replace('100x100bb.png', '600x600bb.png')
+        .replace(/100x100/g, '600x600');
+
+      const cleanTitle = rawTitle.replace(/[<>:"/\\|?*]/g, '').trim();
+      const filename = `${cleanTitle || 'Cover'} - Cover.jpg`;
+      const safeAsciiArtwork = filename.replace(/[^\x20-\x7E]/g, '').replace(/"/g, '');
+
+      // Return JSON metadata format for client verification if requested
+      if (query.format === 'json') {
+        return {
+          statusCode: 200,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({
+            success: true,
+            downloadUrl: highResUrl,
+            filename
+          })
+        };
+      }
+
+      try {
+        const imgRes = await axios.get(highResUrl, {
+          responseType: 'arraybuffer',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+          },
+          timeout: 10000
+        });
+
+        const contentType = imgRes.headers['content-type'] || 'image/jpeg';
+        const imageBuffer = Buffer.from(imgRes.data);
+
+        return {
+          statusCode: 200,
+          headers: {
+            ...CORS_HEADERS,
+            'Content-Type': contentType,
+            'Content-Disposition': `attachment; filename="${safeAsciiArtwork}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+            'Content-Length': String(imageBuffer.length),
+            'Cache-Control': 'public, max-age=86400'
+          },
+          body: imageBuffer.toString('base64'),
+          isBase64Encoded: true
+        };
+      } catch (err) {
+        console.error('Artwork download proxy error in serverless:', err.message);
+        // Fallback: 302 redirect directly to high-res image
+        return {
+          statusCode: 302,
+          headers: {
+            ...CORS_HEADERS,
+            'Location': highResUrl,
+            'Content-Disposition': `attachment; filename="${safeAsciiArtwork}"`
+          },
+          body: ''
+        };
+      }
+    }
+
+    // 9. Stream proxy
     if (path === '/stream') {
       const targetUrl = query.url;
       if (!targetUrl) {

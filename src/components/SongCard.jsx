@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Play, Pause, Disc3, Plus, Check, Clock, Radio, Music, Download, Copy, CheckCheck, Image as ImageIcon } from 'lucide-react';
 import { extractSongDetails } from '../utils/matchSong';
 import { resolveSongAudio } from '../services/musicMetadata';
-import { downloadSongFile } from '../utils/downloadHelper';
+import { downloadSongFile, downloadCoverImage } from '../utils/downloadHelper';
 
 export default function SongCard({
   song,
@@ -68,42 +68,15 @@ export default function SongCard({
 
   const handleDownloadCoverClick = async (e) => {
     e.stopPropagation();
-    if (!song.artworkUrl) return;
+    if (!song.artworkUrl || isDownloadingCover) return;
 
     setIsDownloadingCover(true);
-    const cleanFilename = `${displayTitle.replace(/[<>:"/\\|?*]/g, '')} - Cover.jpg`;
-
     try {
-      let blob = null;
-      try {
-        const directRes = await fetch(song.artworkUrl, { mode: 'cors' });
-        if (directRes.ok) blob = await directRes.blob();
-      } catch (err) {}
-
-      if (!blob) {
-        try {
-          const artworkEndpoint = `/api/download/artwork?url=${encodeURIComponent(song.artworkUrl)}&title=${encodeURIComponent(displayTitle)}`;
-          const proxyRes = await fetch(artworkEndpoint);
-          if (proxyRes.ok) blob = await proxyRes.blob();
-        } catch (err) {}
-      }
-
-      if (blob) {
-        const objectUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        link.setAttribute('download', cleanFilename);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
-      } else {
-        window.open(song.artworkUrl, '_blank');
-      }
+      await downloadCoverImage(song.artworkUrl, displayTitle);
     } catch (err) {
-      window.open(song.artworkUrl, '_blank');
+      console.warn('SongCard cover download error:', err);
     } finally {
-      setIsDownloadingCover(false);
+      setTimeout(() => setIsDownloadingCover(false), 1200);
     }
   };
 

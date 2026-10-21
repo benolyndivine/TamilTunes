@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { getAlbumDetails } from '../services/musicMetadata';
 import { getLyrics } from '../services/lyricsService';
-import { downloadSongFile } from '../utils/downloadHelper';
+import { downloadSongFile, downloadCoverImage } from '../utils/downloadHelper';
 import Loading from './Loading';
 
 export default function AlbumView({
@@ -33,6 +33,8 @@ export default function AlbumView({
   const [isLoading, setIsLoading] = useState(true);
   const [copiedField, setCopiedField] = useState(null); // 'album' | 'artist' | 'year' | 'songsList' | 'artwork' | number (song index)
   const [imageError, setImageError] = useState(false);
+  const [isDownloadingCover, setIsDownloadingCover] = useState(false);
+  const [coverDownloaded, setCoverDownloaded] = useState(false);
 
   // Selected song details inside album view modal
   const [inspectedSong, setInspectedSong] = useState(null);
@@ -78,15 +80,21 @@ export default function AlbumView({
     copyToClipboard(songListText, 'songsList');
   };
 
-  // Direct backend cover artwork download
-  const handleDownloadCover = () => {
-    if (!artworkUrl) return;
-    const link = document.createElement('a');
-    link.href = `/api/download/artwork?url=${encodeURIComponent(artworkUrl)}&title=${encodeURIComponent(displayAlbum.title || 'Album')}`;
-    link.setAttribute('download', `${displayAlbum.title} - Album Cover.jpg`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Direct bulletproof cover artwork download with multi-tier fallback
+  const handleDownloadCover = async () => {
+    if (!artworkUrl || isDownloadingCover) return;
+    setIsDownloadingCover(true);
+    try {
+      const res = await downloadCoverImage(artworkUrl, displayAlbum.title || 'Album');
+      if (res && res.success) {
+        setCoverDownloaded(true);
+        setTimeout(() => setCoverDownloaded(false), 3000);
+      }
+    } catch (err) {
+      console.error('Album cover download error:', err);
+    } finally {
+      setTimeout(() => setIsDownloadingCover(false), 1200);
+    }
   };
 
   // Direct full 320kbps song download
@@ -186,11 +194,18 @@ export default function AlbumView({
               <button
                 type="button"
                 onClick={handleDownloadCover}
-                className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold shadow-lg flex items-center space-x-1.5 transition"
+                disabled={isDownloadingCover}
+                className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold shadow-lg flex items-center space-x-1.5 transition disabled:opacity-60"
                 title="Download full resolution album cover image"
               >
-                <Download className="w-4 h-4" />
-                <span>Save Cover</span>
+                {isDownloadingCover ? (
+                  <Disc3 className="w-4 h-4 animate-spin" />
+                ) : coverDownloaded ? (
+                  <CheckCheck className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span>{isDownloadingCover ? 'Saving...' : coverDownloaded ? 'Saved!' : 'Save Cover'}</span>
               </button>
               <button
                 type="button"
@@ -311,10 +326,26 @@ export default function AlbumView({
                 <button
                   type="button"
                   onClick={handleDownloadCover}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-md transition"
+                  disabled={isDownloadingCover}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow-md transition disabled:opacity-60"
+                  title="Download full resolution album cover image"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download Album Cover</span>
+                  {isDownloadingCover ? (
+                    <>
+                      <Disc3 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Cover...</span>
+                    </>
+                  ) : coverDownloaded ? (
+                    <>
+                      <CheckCheck className="w-3.5 h-3.5 text-white" />
+                      <span>Cover Downloaded!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download Album Cover</span>
+                    </>
+                  )}
                 </button>
               )}
             </div>
@@ -579,11 +610,21 @@ export default function AlbumView({
                 <button
                   type="button"
                   onClick={handleDownloadCover}
-                  className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold flex items-center justify-center space-x-1.5 transition"
+                  disabled={isDownloadingCover}
+                  className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold flex items-center justify-center space-x-1.5 transition disabled:opacity-60"
                   title="Download high-resolution cover image"
                 >
-                  <Download className="w-4 h-4 text-violet-400" />
-                  <span>Cover Image</span>
+                  {isDownloadingCover ? (
+                    <>
+                      <Disc3 className="w-4 h-4 animate-spin text-violet-400" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 text-violet-400" />
+                      <span>Cover Image</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

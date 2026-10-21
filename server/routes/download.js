@@ -140,12 +140,19 @@ router.get('/song', async (req, res) => {
  * Downloads the high-resolution cover artwork as an image attachment.
  */
 router.get('/artwork', async (req, res) => {
-  const imageUrl = req.query.url;
-  const rawTitle = req.query.title || 'Song';
+  const rawImageUrl = req.query.url || req.query.imageUrl || req.query.artworkUrl;
+  const rawTitle = req.query.title || req.query.album || 'Cover';
 
-  if (!imageUrl) {
+  if (!rawImageUrl) {
     return res.status(400).json({ error: 'url parameter is required for artwork download' });
   }
+
+  const imageUrl = rawImageUrl
+    .replace('150x150.jpg', '500x500.jpg')
+    .replace('50x50.jpg', '500x500.jpg')
+    .replace('100x100bb.jpg', '600x600bb.jpg')
+    .replace('100x100bb.png', '600x600bb.png')
+    .replace(/100x100/g, '600x600');
 
   const filename = `${sanitizeFilename(rawTitle)} - Cover.jpg`;
   const safeAsciiArtwork = filename.replace(/[^\x20-\x7E]/g, '').replace(/"/g, '');

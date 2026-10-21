@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { extractSongDetails } from '../utils/matchSong';
 import { resolveSongAudio } from '../services/musicMetadata';
-import { downloadSongFile } from '../utils/downloadHelper';
+import { downloadSongFile, downloadCoverImage } from '../utils/downloadHelper';
 
 export default function SongDetails({
   song,
@@ -85,87 +85,22 @@ export default function SongDetails({
     }
   };
 
-  // Direct bulletproof cover artwork download with blob and canvas fallbacks
+  // Direct bulletproof cover artwork download with multi-tier fallback
   const handleDownloadCover = async () => {
-    if (!song.artworkUrl) {
-      alert('Cover artwork is unavailable for this track.');
+    if (!song.artworkUrl || isDownloadingCover) {
+      if (!song.artworkUrl) alert('Cover artwork is unavailable for this track.');
       return;
     }
 
     setIsDownloadingCover(true);
-    const cleanFilename = `${displayTitle.replace(/[<>:"/\\|?*]/g, '')} - Cover.jpg`;
-
     try {
-      let blob = null;
-
-      // 1. Try direct CORS fetch (mzstatic and saavncdn both send Access-Control-Allow-Origin: *)
-      try {
-        const directRes = await fetch(song.artworkUrl, { mode: 'cors' });
-        if (directRes.ok) {
-          blob = await directRes.blob();
-        }
-      } catch (e) {
-        // Direct fetch failed, fallback to backend proxy
-      }
-
-      // 2. Fallback to backend artwork proxy endpoint
-      if (!blob) {
-        try {
-          const artworkEndpoint = `/api/download/artwork?url=${encodeURIComponent(song.artworkUrl)}&title=${encodeURIComponent(displayTitle)}`;
-          const proxyRes = await fetch(artworkEndpoint);
-          if (proxyRes.ok) {
-            blob = await proxyRes.blob();
-          }
-        } catch (e) {
-          // Proxy fetch failed, continue to canvas fallback
-        }
-      }
-
-      // 3. Fallback to offscreen canvas
-      if (!blob) {
-        try {
-          blob = await new Promise((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-              try {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth || 600;
-                canvas.height = img.naturalHeight || 600;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas blob failed')), 'image/jpeg', 0.95);
-              } catch (err) {
-                reject(err);
-              }
-            };
-            img.onerror = reject;
-            img.src = song.artworkUrl;
-          });
-        } catch (e) {
-          // Canvas export failed
-        }
-      }
-
-      // 4. Trigger download with blob if available
-      if (blob) {
-        const objectUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        link.setAttribute('download', cleanFilename);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
-      } else {
-        // Last-resort fallback: open image in a new tab
-        window.open(song.artworkUrl, '_blank');
-      }
+      await downloadCoverImage(song.artworkUrl, displayTitle);
     } catch (err) {
       console.warn('Cover download error:', err);
-      window.open(song.artworkUrl, '_blank');
     } finally {
-      setIsDownloadingCover(false);
+      setTimeout(() => {
+        setIsDownloadingCover(false);
+      }, 1200);
     }
   };
 
