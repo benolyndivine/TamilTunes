@@ -19,7 +19,8 @@ import {
 import {
   fetchSpotifyCanvas,
   extractSpotifyTrackId,
-  VERIFIED_CANVAS_DEMOS
+  VERIFIED_CANVAS_DEMOS,
+  findKnownCanvas
 } from '../services/canvasService';
 import { downloadCanvasVideo } from '../utils/downloadHelper';
 
@@ -49,15 +50,23 @@ export default function SpotifyCanvasModal({
     setDownloadSuccess(false);
 
     if (initialSong) {
-      // Check if song has a direct spotify track URL
-      const directSpotify = initialSong.externalUrls?.spotify || '';
-      if (directSpotify.includes('/track/')) {
-        setInputUrl(directSpotify);
-        handleResolve(directSpotify, initialSong.title, initialSong.artist);
+      // 1. Check if song matches verified canvas database
+      const known = findKnownCanvas(initialSong.title, initialSong.artist, initialSong.album);
+      if (known) {
+        const directUrl = `https://open.spotify.com/track/${known.trackId}`;
+        setInputUrl(directUrl);
+        handleResolve(directUrl, initialSong.title, initialSong.artist);
       } else {
-        setInputUrl('');
-        // Attempt search by title & artist
-        handleResolve('', initialSong.title, initialSong.artist);
+        // 2. Check if song has a direct spotify track URL
+        const directSpotify = initialSong.externalUrls?.spotify || '';
+        if (directSpotify.includes('/track/')) {
+          setInputUrl(directSpotify);
+          handleResolve(directSpotify, initialSong.title, initialSong.artist);
+        } else {
+          setInputUrl('');
+          // Attempt search by title & artist
+          handleResolve('', initialSong.title, initialSong.artist);
+        }
       }
     } else {
       // Load a default popular demo
@@ -82,7 +91,8 @@ export default function SpotifyCanvasModal({
         url: target,
         trackId: extractSpotifyTrackId(target) || '',
         title,
-        artist
+        artist,
+        album: initialSong?.album || ''
       });
 
       if (res.success && res.canvasUrl) {
@@ -250,8 +260,8 @@ export default function SpotifyCanvasModal({
                   value={inputUrl}
                   onChange={(e) => setInputUrl(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleResolve()}
-                  placeholder="https://open.spotify.com/track/3OHfY25tqY28d16oZczHc8"
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-xs sm:text-sm text-slate-100 placeholder-slate-500 transition outline-none"
+                  placeholder="Paste Spotify track link (e.g. open.spotify.com/track/...)"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-xs sm:text-sm text-slate-100 placeholder-slate-600 transition outline-none"
                 />
               </div>
 

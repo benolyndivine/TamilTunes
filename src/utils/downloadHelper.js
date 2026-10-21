@@ -359,7 +359,8 @@ export async function downloadSongCanvas(song) {
     const res = await fetchSpotifyCanvas({
       url: spotifyUrl,
       title,
-      artist
+      artist,
+      album
     });
 
     if (res && res.success && res.canvasUrl) {

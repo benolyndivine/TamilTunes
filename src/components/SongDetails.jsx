@@ -66,7 +66,8 @@ export default function SongDetails({
       const res = await fetchSpotifyCanvas({
         url: song.externalUrls?.spotify || '',
         title: displayTitle,
-        artist: song.artist
+        artist: song.artist,
+        album: song.album
       });
       if (res && res.success && res.canvasUrl) {
         setInlineCanvasUrl(res.canvasUrl);

@@ -963,101 +963,131 @@ export const handler = async (event, context) => {
       const rawAlbum = query.album || '';
 
       // Direct Known Hit Match for instant resolution
-      const combinedSearch = `${rawTitle} ${rawArtist} ${rawAlbum}`.toLowerCase();
+      // Keywords strictly match song/track titles to prevent incorrect video matching
+      const cleanTitle = (rawTitle || '').toLowerCase().trim();
+      const cleanAlbum = (rawAlbum || '').toLowerCase().trim();
       const knownHits = [
         {
-          keywords: ['arabic kuthu', 'halamithi', 'beast'],
-          title: 'Arabic Kuthu - Halamithi Habibo',
-          artist: 'Anirudh Ravichander, Jonita Gandhi',
-          trackId: '3eYaxbCWJ9gj4OqGVekwgm',
-          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/5bSw7fRotCnRCcO9br14W5/video/60e9129aa6d14c5ea2ccb3626a692bb1.cnvs.mp4'
+          keywords: ['pesamale'],
+          title: 'Pesamale',
+          artist: 'Siri Xander, Arra Aria Khayal',
+          trackId: '2lo95sXI2RkrXLOYTXpZwe',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/5bSw7fRotCnRCcO9br14W5/video/480e18734ee643309fc67a400ab1a285.cnvs.mp4'
         },
         {
-          keywords: ['hukum', 'thalaivar', 'jailer'],
+          keywords: ['arabic kuthu', 'halamithi habibo'],
+          title: 'Arabic Kuthu - Halamithi Habibo',
+          artist: 'Anirudh Ravichander, Jonita Gandhi',
+          trackId: '6yvxu91deFKt3X1QoV6qMv',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/7eUoEowYzdOzp0xETZgqjt/video/68026d1c679d4483b905f5dafa2a8b91.cnvs.mp4'
+        },
+        {
+          keywords: ['hukum', 'thalaivar alappara'],
           title: 'Hukum - Thalaivar Alappara',
           artist: 'Anirudh Ravichander',
           trackId: '7hu8IjnvYHiXaKp2RjOWZd',
-          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/3ZBqv9LoqAZkFanJh73zcz/video/a4201a09839c41d291b9b7d43f3e1e30.cnvs.mp4'
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/3ZBqv9LoqAZkFanJh73zcz/video/ed5525afa354402eaf6a39a20ad52525.cnvs.mp4'
         },
         {
-          keywords: ['naa ready', 'leo'],
+          keywords: ['naa ready'],
           title: 'Naa Ready',
           artist: 'Thalapathy Vijay, Anirudh Ravichander',
-          trackId: '12qR6oASQcapAj3OOGwui1',
-          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/679dyVMd0SqzIQbUKs0QAp/video/9ed373e139824f7d9f1fcf60adaee4c8.cnvs.mp4'
+          trackId: '1B02UI29t3PTh3m98absaP',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/5bSw7fRotCnRCcO9br14W5/video/4e17df0178054c26b0d3092a7d6ec601.cnvs.mp4'
         },
         {
-          keywords: ['badass', 'leo'],
+          keywords: ['badass'],
           title: 'Badass',
           artist: 'Anirudh Ravichander',
-          trackId: '284PScQ2BJg0NrnJoON6lN',
-          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/679dyVMd0SqzIQbUKs0QAp/video/9ed373e139824f7d9f1fcf60adaee4c8.cnvs.mp4'
+          trackId: '3Tyxhf3QtVKlyetp60ouaM',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/5bSw7fRotCnRCcO9br14W5/video/1809b3e594864200b13e972c98174267.cnvs.mp4'
         },
         {
-          keywords: ['aasa kooda', 'think indie'],
-          title: 'Aasa Kooda',
-          artist: 'Sai Abhyankkar',
-          trackId: '792ZNLsjofvKbJUPBCyXGz',
-          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/7eUoEowYzdOzp0xETZgqjt/video/16662d4406fc464dbcb2a684b833be23.cnvs.mp4'
-        },
-        {
-          keywords: ['katchi sera'],
-          title: 'Katchi Sera',
-          artist: 'Sai Abhyankkar',
-          trackId: '792ZNLsjofvKbJUPBCyXGz',
-          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/7eUoEowYzdOzp0xETZgqjt/video/16662d4406fc464dbcb2a684b833be23.cnvs.mp4'
-        },
-        {
-          keywords: ['vaathi coming', 'master'],
+          keywords: ['vaathi coming'],
           title: 'Vaathi Coming',
           artist: 'Anirudh Ravichander',
-          trackId: '3eYaxbCWJ9gj4OqGVekwgm',
-          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/5bSw7fRotCnRCcO9br14W5/video/60e9129aa6d14c5ea2ccb3626a692bb1.cnvs.mp4'
+          trackId: '2BcPFQ7nrtUObgAs72xaac',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/5bSw7fRotCnRCcO9br14W5/video/48b2db3c979643298353aefb35f367ac.cnvs.mp4'
         },
         {
-          keywords: ['rowdy baby', 'maari'],
+          keywords: ['rowdy baby'],
           title: 'Rowdy Baby',
           artist: 'Dhanush, Dhee',
+          trackId: '3c6Y3iJr3bm6utsdRcm30J',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/3ZBqv9LoqAZkFanJh73zcz/video/df402d14700242b8855b5716a580ee0d.cnvs.mp4'
+        },
+        {
+          keywords: ['manasilaayo'],
+          title: 'Manasilaayo',
+          artist: 'Anirudh Ravichander',
+          trackId: '7KB0zREYCrQU3refE5x0M3',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/5bSw7fRotCnRCcO9br14W5/video/1210e972bbfa425a93b747063903c270.cnvs.mp4'
+        },
+        {
+          keywords: ['kannaana kanne'],
+          title: 'Kannaana Kanne',
+          artist: 'Anirudh Ravichander',
+          trackId: '3czW15beqK37nK6ohmNOVf',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/3ZBqv9LoqAZkFanJh73zcz/video/73c5e37eb715488686cccd15a4540487.cnvs.mp4'
+        },
+        {
+          keywords: ['fear song', 'devara'],
+          title: 'Fear Song',
+          artist: 'Anirudh Ravichander',
+          trackId: '792ZNLsjofvKbJUPBCyXGz',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/7qqEhYZpNiUZ6Jkm5Ek20z/video/2695f5a8eabe48c4bc5e5333de891ba8.cnvs.mp4'
+        },
+        {
+          keywords: ['bae'],
+          title: 'Bae',
+          artist: 'Anirudh Ravichander',
+          trackId: '5D507IC1VOAg7bKkmOblr6',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/5bSw7fRotCnRCcO9br14W5/video/ddc51a134c3e4436a9a7390ddf0bbd84.cnvs.mp4'
+        },
+        {
+          keywords: ['vip title', 'velai illa pattadhaari'],
+          title: 'VIP Title Song',
+          artist: 'Anirudh Ravichander',
+          trackId: '284PScQ2BJg0NrnJoON6lN',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/3ZBqv9LoqAZkFanJh73zcz/video/df2b4d0f1b8e43389622c80267b9b5b4.cnvs.mp4'
+        },
+        {
+          keywords: ['udhungada sangu'],
+          title: 'Udhungada Sangu',
+          artist: 'Anirudh Ravichander',
           trackId: '12qR6oASQcapAj3OOGwui1',
           canvasUrl: 'https://canvaz.scdn.co/upload/licensor/679dyVMd0SqzIQbUKs0QAp/video/9ed373e139824f7d9f1fcf60adaee4c8.cnvs.mp4'
         },
         {
-          keywords: ['why this kolaveri', 'kolaveri di'],
-          title: 'Why This Kolaveri Di',
-          artist: 'Dhanush, Anirudh Ravichander',
-          trackId: '7hu8IjnvYHiXaKp2RjOWZd',
-          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/3ZBqv9LoqAZkFanJh73zcz/video/a4201a09839c41d291b9b7d43f3e1e30.cnvs.mp4'
-        },
-        {
-          keywords: ['kaavaalaa', 'jailer'],
-          title: 'Kaavaalaa',
-          artist: 'Anirudh Ravichander, Shilpa Rao',
-          trackId: '7hu8IjnvYHiXaKp2RjOWZd',
-          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/3ZBqv9LoqAZkFanJh73zcz/video/a4201a09839c41d291b9b7d43f3e1e30.cnvs.mp4'
-        },
-        {
-          keywords: ['manasilaayo', 'vettaiyan'],
-          title: 'Manasilaayo',
+          keywords: ['varavaa varavaa'],
+          title: 'Varavaa Varavaa',
           artist: 'Anirudh Ravichander',
-          trackId: '3eYaxbCWJ9gj4OqGVekwgm',
-          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/7eUoEowYzdOzp0xETZgqjt/video/16662d4406fc464dbcb2a684b833be23.cnvs.mp4'
+          trackId: '7hu8IjnvYHiXaKp2RjOWZd',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/3ZBqv9LoqAZkFanJh73zcz/video/ed5525afa354402eaf6a39a20ad52525.cnvs.mp4'
         },
         {
-          keywords: ['one name', 'anirudh'],
+          keywords: ['radhimaa'],
+          title: 'Radhimaa',
+          artist: 'Sai Abhyankkar',
+          trackId: '6jJHYbJReFfR2ieGzRP5bq',
+          canvasUrl: 'https://canvaz.scdn.co/upload/licensor/63HSZmQDZXIeK1J4mJ55hX/video/8e0a210d728e4b28a76518711da6bf0c.cnvs.mp4'
+        },
+        {
+          keywords: ['one name'],
           title: 'One Name',
           artist: 'Anirudh Ravichander',
           trackId: '3eYaxbCWJ9gj4OqGVekwgm',
           canvasUrl: 'https://canvaz.scdn.co/upload/licensor/7eUoEowYzdOzp0xETZgqjt/video/16662d4406fc464dbcb2a684b833be23.cnvs.mp4'
         },
         {
-          keywords: ['kill bill', 'sza'],
+          keywords: ['kill bill'],
           title: 'Kill Bill',
           artist: 'SZA',
           trackId: '3OHfY25tqY28d16oZczHc8',
           canvasUrl: 'https://canvaz.scdn.co/upload/licensor/5bSw7fRotCnRCcO9br14W5/video/60e9129aa6d14c5ea2ccb3626a692bb1.cnvs.mp4'
         },
         {
-          keywords: ['shape of you', 'ed sheeran'],
+          keywords: ['shape of you'],
           title: 'Shape of You',
           artist: 'Ed Sheeran',
           trackId: '7qiZfU4dY1lWllzX7mPBI3',
@@ -1065,7 +1095,7 @@ export const handler = async (event, context) => {
         }
       ];
 
-      const foundHit = knownHits.find(h => h.keywords.some(k => combinedSearch.includes(k)));
+      const foundHit = knownHits.find(h => h.keywords.some(k => cleanTitle.includes(k) || cleanAlbum.includes(k)));
       if (foundHit) {
         return {
           statusCode: 200,
@@ -1096,50 +1126,14 @@ export const handler = async (event, context) => {
         trackId = urlParam.trim();
       }
 
-      // If trackId not directly passed, attempt search by artist/title
-      if (!trackId && (rawArtist || rawTitle)) {
-        try {
-          const q = (rawArtist || rawTitle).trim();
-          const searchRes = await axios.get(`https://canvasdownloader.com/api/search?q=${encodeURIComponent(q)}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-            timeout: 5000
-          });
-          if (searchRes.data?.artists?.length > 0) {
-            const slug = searchRes.data.artists[0].slug;
-            const artistPageRes = await axios.get(`https://canvasdownloader.com/artists/${slug}`, {
-              headers: { 'User-Agent': 'Mozilla/5.0' },
-              timeout: 6000
-            });
-            const vMatch = artistPageRes.data.match(/<source src="([^"]+\.cnvs\.mp4[^"]*)"/i);
-            if (vMatch) {
-              const canvasUrl = vMatch[1].replace('#t=0.001', '');
-              return {
-                statusCode: 200,
-                headers: CORS_HEADERS,
-                body: JSON.stringify({
-                  success: true,
-                  hasCanvas: true,
-                  canvasUrl,
-                  title: rawTitle || searchRes.data.artists[0].name,
-                  resolution: '1080p (1080x1920 Full HD)',
-                  aspectRatio: '9:16 Vertical Portrait',
-                  fps: 60,
-                  format: 'MP4'
-                })
-              };
-            }
-          }
-        } catch (e) {}
-      }
-
       if (!trackId) {
         return {
-          statusCode: 400,
+          statusCode: 200,
           headers: CORS_HEADERS,
           body: JSON.stringify({
             success: false,
             hasCanvas: false,
-            error: 'A valid Spotify track URL (e.g. https://open.spotify.com/track/...) or 22-character track ID is required.'
+            error: 'No Spotify Canvas video is available for this song.'
           })
         };
       }
