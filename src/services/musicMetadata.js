@@ -200,11 +200,38 @@ export async function resolveSongAudio(title, artist = '', album = '') {
       params: { title: title.trim(), artist: artist.trim(), album: album.trim() },
       timeout: 10000
     });
-    return response.data;
+    if (response.data && response.data.url) {
+      return response.data;
+    }
   } catch (err) {
-    console.warn('resolveSongAudio backend failed:', err.message);
-    return null;
+    console.warn('resolveSongAudio backend failed, attempting search fallback:', err.message);
   }
+
+  // Fallback: search backend directly for song title
+  try {
+    const cleanTitle = title.replace(/\s*\(From\s+[^)]+\)/gi, '').trim();
+    const searchRes = await axios.get(`${API_BASE}/search`, {
+      params: { q: cleanTitle, limit: 5 },
+      timeout: 8000
+    });
+    const results = searchRes.data?.results || [];
+    const matched = results.find(r => r.isFullAudio && r.audioUrl);
+    if (matched) {
+      return {
+        url: matched.downloadUrl || matched.audioUrl,
+        streamUrl: matched.audioUrl,
+        quality: matched.audioQuality || '320 Kbps HQ Studio Audio',
+        duration: matched.duration,
+        title: matched.title,
+        artist: matched.artist,
+        album: matched.album
+      };
+    }
+  } catch (searchErr) {
+    console.warn('resolveSongAudio search fallback failed:', searchErr.message);
+  }
+
+  return null;
 }
 
 /**

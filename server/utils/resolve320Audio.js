@@ -28,44 +28,68 @@ export function decryptJioMediaUrl(encryptedUrl = '') {
 }
 
 /**
- * Clean search query for song matching
+ * Thoroughly cleans titles and artists to maximize search hit rate on music providers
  */
-function cleanQuery(title = '', artist = '') {
-  const cleanTitle = title
-    .replace(/\s*\(From\s+["'][^"']+["']\)/i, '')
-    .replace(/\s*\(From\s+[^)]+\)/i, '')
-    .replace(/\s*-\s*(Single|Tamil|Original Motion Picture Soundtrack)$/i, '')
+function cleanQueryParts(title = '', artist = '', album = '') {
+  const cleanTitle = (title || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s*\(From\s+[^)]+\)/gi, '')
+    .replace(/\s*\[From\s+[^\]]+\]/gi, '')
+    .replace(/\s*\(feat\.[^)]+\)/gi, '')
+    .replace(/\s*\(with[^)]+\)/gi, '')
+    .replace(/\s*-\s*(Single|Tamil|Original Motion Picture Soundtrack|Reprise|Remastered|From\s+.*)$/gi, '')
     .trim();
 
-  const primaryArtist = artist.split('&')[0].split(',')[0].trim();
-  return `${cleanTitle} ${primaryArtist}`.trim();
+  const primaryArtist = (artist || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, '&')
+    .split('&')[0]
+    .split(',')[0]
+    .replace(/\s*feat\..*$/i, '')
+    .trim();
+
+  const cleanAlbum = (album || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s*\(Original Motion Picture Soundtrack\)/gi, '')
+    .replace(/\s*-\s*Single$/gi, '')
+    .trim();
+
+  return { cleanTitle, primaryArtist, cleanAlbum };
 }
 
 // In-memory cache for resolved 320kbps tracks
 const resolved320Cache = new Map();
 
 /**
- * Searches and resolves a full length 320kbps audio stream URL for any Tamil song
+ * Searches and resolves a full-length 320kbps audio stream URL for any Tamil song
  */
 export async function resolveFull320Audio(title = '', artist = '', album = '') {
   if (!title) return null;
 
-  const cacheKey = `${title.toLowerCase()}_${artist.toLowerCase()}`;
+  const { cleanTitle, primaryArtist, cleanAlbum } = cleanQueryParts(title, artist, album);
+  const cacheKey = `${(cleanTitle || title).toLowerCase()}_${(primaryArtist || artist).toLowerCase()}`;
   if (resolved320Cache.has(cacheKey)) {
     return resolved320Cache.get(cacheKey);
   }
 
-  const query = cleanQuery(title, artist);
+  // Construct queries from most specific to broader
+  const queriesToTry = [
+    cleanTitle && primaryArtist ? `${cleanTitle} ${primaryArtist}` : null,
+    cleanTitle && cleanAlbum ? `${cleanTitle} ${cleanAlbum}` : null,
+    cleanTitle,
+    title.replace(/\s*\(From\s+[^)]+\)/gi, '').trim(),
+    title
+  ].filter((q, idx, arr) => Boolean(q) && arr.indexOf(q) === idx);
+
+  let songsList = [];
 
   try {
-    // Try multiple queries: cleaned title + artist, then just title, then title + album
-    const queriesToTry = [
-      query,
-      title.replace(/\s*\(From\s+[^)]+\)/i, '').replace(/\s*-\s*.*$/, '').trim(),
-      album ? `${title.replace(/\s*\(From\s+[^)]+\)/i, '').trim()} ${album}` : null
-    ].filter(Boolean);
-
-    // Try search.getResults first as it directly contains encrypted_media_url
+    // Strategy 1: JioSaavn search.getResults (contains encrypted_media_url directly)
     for (const q of queriesToTry) {
       try {
         const searchRes = await axios.get('https://www.jiosaavn.com/api.php', {
@@ -74,7 +98,7 @@ export async function resolveFull320Audio(title = '', artist = '', album = '') {
             _format: 'json',
             _marker: '0',
             p: 1,
-            n: 5,
+            n: 10,
             q
           },
           headers: {
@@ -93,7 +117,7 @@ export async function resolveFull320Audio(title = '', artist = '', album = '') {
                   url: url320,
                   quality: '320 Kbps HQ Studio Audio',
                   duration: parseInt(item.duration, 10) || 240,
-                  title: (item.song || title).replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&'),
+                  title: (item.song || item.title || title).replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&'),
                   artist: item.singers || item.primary_artists || artist,
                   album: (item.album || album).replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&')
                 };
@@ -106,11 +130,11 @@ export async function resolveFull320Audio(title = '', artist = '', album = '') {
           break;
         }
       } catch (e) {
-        // continue
+        // continue to next query
       }
     }
 
-    // Fallback: autocomplete.get + song.getDetails if search.getResults didn't succeed
+    // Strategy 2: autocomplete.get + song.getDetails
     if (!songsList.length) {
       for (const q of queriesToTry) {
         try {
@@ -135,45 +159,45 @@ export async function resolveFull320Audio(title = '', artist = '', album = '') {
       }
     }
 
-    if (!songsList.length) return null;
+    if (songsList.length > 0) {
+      for (const songCandidate of songsList.slice(0, 3)) {
+        const pid = songCandidate.id;
+        if (!pid) continue;
 
-    const topSong = songsList[0];
-    const pid = topSong.id;
+        try {
+          const detailsRes = await axios.get('https://www.jiosaavn.com/api.php', {
+            params: {
+              __call: 'song.getDetails',
+              pids: pid,
+              _format: 'json',
+              _marker: '0',
+              ctx: 'web6dot0'
+            },
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            timeout: 6000
+          });
 
-    // Fetch complete song details with encrypted_media_url
-    const detailsRes = await axios.get('https://www.jiosaavn.com/api.php', {
-      params: {
-        __call: 'song.getDetails',
-        pids: pid,
-        _format: 'json',
-        _marker: '0',
-        ctx: 'web6dot0'
-      },
-      headers: {
-        'User-Agent': 'Mozilla/5.0'
-      },
-      timeout: 6000
-    });
-
-    const fullSong = detailsRes.data?.songs?.[0];
-    if (fullSong?.encrypted_media_url) {
-      const url320 = decryptJioMediaUrl(fullSong.encrypted_media_url);
-      if (url320) {
-        const result = {
-          url: url320,
-          quality: '320 Kbps HQ Studio Audio',
-          duration: parseInt(fullSong.duration, 10) || 240,
-          title: (fullSong.song || title).replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&'),
-          artist: fullSong.singers || fullSong.primary_artists || artist,
-          album: (fullSong.album || album).replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&')
-        };
-
-        resolved320Cache.set(cacheKey, result);
-        return result;
+          const fullSong = detailsRes.data?.songs?.[0] || detailsRes.data?.[pid];
+          if (fullSong?.encrypted_media_url) {
+            const url320 = decryptJioMediaUrl(fullSong.encrypted_media_url);
+            if (url320) {
+              const result = {
+                url: url320,
+                quality: '320 Kbps HQ Studio Audio',
+                duration: parseInt(fullSong.duration, 10) || 240,
+                title: (fullSong.song || title).replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&'),
+                artist: fullSong.singers || fullSong.primary_artists || artist,
+                album: (fullSong.album || album).replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&')
+              };
+              resolved320Cache.set(cacheKey, result);
+              return result;
+            }
+          }
+        } catch (detailErr) {}
       }
     }
   } catch (err) {
-    console.warn(`Could not resolve 320kbps audio for "${query}":`, err.message);
+    console.warn(`Could not resolve 320kbps audio for "${title}":`, err.message);
   }
 
   return null;

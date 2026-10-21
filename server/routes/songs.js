@@ -173,7 +173,7 @@ router.get('/search', async (req, res) => {
         _format: 'json',
         _marker: '0',
         p: 1,
-        n: Math.max(limit, 15),
+        n: Math.max(limit, 30),
         q: query
       },
       headers: {
@@ -192,7 +192,7 @@ router.get('/search', async (req, res) => {
         country: 'IN',
         media: 'music',
         entity: 'song',
-        limit: Math.max(limit, 15)
+        limit: Math.max(limit, 20)
       },
       timeout: 8000
     }).catch(err => {
@@ -239,6 +239,27 @@ router.get('/search', async (req, res) => {
           combinedResults.push(norm);
         }
       }
+    }
+
+    // Auto-resolve full 320kbps audio for any unmatched tracks in top results
+    const unmatchedItems = combinedResults.filter(s => !s.isFullAudio).slice(0, 10);
+    if (unmatchedItems.length > 0) {
+      await Promise.allSettled(
+        unmatchedItems.map(async (norm) => {
+          try {
+            const resolved = await resolveFull320Audio(norm.title, norm.artist, norm.album);
+            if (resolved && resolved.url) {
+              norm.audioUrl = resolved.url;
+              norm.downloadUrl = resolved.url;
+              norm.isFullAudio = true;
+              norm.duration = resolved.duration || norm.duration;
+              norm.durationFormatted = formatDuration(norm.duration);
+              norm.audioQuality = '320 Kbps HQ Studio Audio';
+              norm.audioType = '320 Kbps Full HQ Audio';
+            }
+          } catch (e) {}
+        })
+      );
     }
 
     const finalResults = combinedResults.slice(0, limit);
@@ -569,6 +590,29 @@ router.get('/album-details', async (req, res) => {
           artworkUrl: (first.artworkUrl100 || '').replace('100x100bb.jpg', '600x600bb.jpg'),
           trackCount: tracks.length
         };
+      }
+    }
+
+    // Auto-resolve full 320kbps audio for album tracks that need it
+    if (tracks && tracks.length > 0) {
+      const needResolve = tracks.filter(t => !t.isFullAudio).slice(0, 15);
+      if (needResolve.length > 0) {
+        await Promise.allSettled(
+          needResolve.map(async (t) => {
+            try {
+              const resolved = await resolveFull320Audio(t.title, t.artist, albumTitle || albumMeta?.title);
+              if (resolved && resolved.url) {
+                t.audioUrl = resolved.url;
+                t.downloadUrl = resolved.url;
+                t.isFullAudio = true;
+                t.duration = resolved.duration || t.duration;
+                t.durationFormatted = formatDuration(t.duration);
+                t.audioQuality = '320 Kbps HQ Studio Audio';
+                t.audioType = '320 Kbps Full HQ Audio';
+              }
+            } catch (e) {}
+          })
+        );
       }
     }
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Play, Pause, Disc3, Plus, Check, Clock, Radio, Music, Download, Copy, CheckCheck, Image as ImageIcon } from 'lucide-react';
 import { extractSongDetails } from '../utils/matchSong';
 import { resolveSongAudio } from '../services/musicMetadata';
+import { downloadSongFile } from '../utils/downloadHelper';
 
 export default function SongCard({
   song,
@@ -57,55 +58,11 @@ export default function SongCard({
     setIsDownloading(true);
 
     try {
-      let targetUrl = song.downloadUrl || (song.isFullAudio ? song.audioUrl : '');
-
-      if (!targetUrl || targetUrl.includes('preview') || targetUrl.includes('apple.com') || targetUrl.includes('mzstatic.com')) {
-        try {
-          const resolved = await resolveSongAudio(displayTitle, song.artist, displayAlbum);
-          if (resolved && resolved.url) {
-            targetUrl = resolved.url;
-          }
-        } catch (err) {
-          console.warn('Resolve error during card download:', err);
-        }
-      }
-
-      const cleanFilename = `${displayTitle.replace(/[<>:"/\\|?*]/g, '')} (320kbps).mp3`;
-
-      // 1. Direct High-Speed Blob Download
-      if (targetUrl && (targetUrl.includes('saavncdn.com') || targetUrl.includes('_320.mp4'))) {
-        try {
-          const cdnRes = await fetch(targetUrl);
-          if (cdnRes.ok) {
-            const blob = await cdnRes.blob();
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = cleanFilename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-            return;
-          }
-        } catch (fetchErr) {
-          console.warn('Direct CDN fetch failed in card, falling back to download endpoint:', fetchErr);
-        }
-      }
-
-      // 2. Fallback to /api/download/song
-      const downloadEndpoint = `/api/download/song?audioUrl=${encodeURIComponent(targetUrl || '')}&title=${encodeURIComponent(displayTitle)}&artist=${encodeURIComponent(song.artist || '')}&album=${encodeURIComponent(displayAlbum || '')}`;
-
-      const link = document.createElement('a');
-      link.href = downloadEndpoint;
-      link.setAttribute('download', cleanFilename);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await downloadSongFile(song);
     } catch (err) {
       console.error('SongCard download error:', err);
     } finally {
-      setTimeout(() => setIsDownloading(false), 2000);
+      setTimeout(() => setIsDownloading(false), 1500);
     }
   };
 

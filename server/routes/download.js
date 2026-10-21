@@ -42,14 +42,27 @@ router.get('/song', async (req, res) => {
         isFull320 = true;
       }
     } catch (e) {
-      console.warn('320 resolution fallback:', e.message);
+      console.warn('320 resolution fallback in download route:', e.message);
     }
   }
 
-  // Never stream a 30-second preview as a download!
+  // Second resolution attempt with simplified title if still not resolved
+  if (!isFull320 && rawTitle) {
+    try {
+      const cleanTitle = rawTitle.replace(/\s*\(From\s+[^)]+\)/gi, '').replace(/\s*-\s*.*$/gi, '').trim();
+      if (cleanTitle && cleanTitle !== rawTitle) {
+        const resolved = await resolveFull320Audio(cleanTitle, rawArtist.split('&')[0].trim(), rawAlbum);
+        if (resolved && resolved.url) {
+          audioUrl = resolved.url;
+          isFull320 = true;
+        }
+      }
+    } catch (e) {}
+  }
+
   if (!audioUrl || !isFull320) {
     return res.status(404).json({
-      error: 'Full length 320kbps audio stream unavailable for direct download'
+      error: 'Full length 320kbps audio stream unavailable for direct download. Please try another track.'
     });
   }
 
@@ -61,9 +74,22 @@ router.get('/song', async (req, res) => {
 
   const safeAsciiFilename = filename.replace(/[^\x20-\x7E]/g, '').replace(/"/g, '');
 
+  // If requested as JSON metadata (e.g. for client-side blob download coordination)
+  if (req.query.format === 'json') {
+    return res.json({
+      success: true,
+      downloadUrl: audioUrl,
+      filename,
+      isFull320: true,
+      quality: '320kbps'
+    });
+  }
+
   // In Serverless (Netlify / Lambda), streaming >6MB payloads returns 502 Bad Gateway.
   // Redirecting 302 to the high-speed CDN allows the browser to download the complete 320kbps file natively.
   if (isServerless || req.query.mode === 'redirect') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     return res.redirect(302, audioUrl);
   }
 
@@ -81,7 +107,9 @@ router.get('/song', async (req, res) => {
 
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Disposition', `attachment; filename="${safeAsciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.setHeader('X-Audio-Quality', isFull320 ? '320kbps Full Audio' : 'Preview Audio');
+    res.setHeader('X-Audio-Quality', '320kbps Full Audio');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 
     if (response.headers['content-length']) {
       res.setHeader('Content-Length', response.headers['content-length']);
@@ -135,6 +163,7 @@ router.get('/artwork', async (req, res) => {
 
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Content-Disposition', `attachment; filename="${safeAsciiArtwork}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader('Access-Control-Allow-Origin', '*');
 
     if (response.headers['content-length']) {
       res.setHeader('Content-Length', response.headers['content-length']);
@@ -153,7 +182,7 @@ router.get('/artwork', async (req, res) => {
     console.error('Download artwork error:', error.message);
     if (!res.headersSent) {
       res.status(500).json({
-        error: 'Failed to download cover artwork',
+        error: 'Failed to download artwork file from source',
         details: error.message
       });
     }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { resolveSongAudio } from '../services/musicMetadata';
 
 /**
  * Custom hook for audio playback management
@@ -137,6 +138,53 @@ export function useAudioPlayer() {
 
     const audio = audioRef.current;
     if (!audio) return;
+
+    // If track is not full 320kbps or is an iTunes preview snippet, auto-resolve to full track
+    if (!track.isFullAudio || (track.audioUrl && (track.audioUrl.includes('preview') || track.audioUrl.includes('apple.com')))) {
+      setIsLoading(true);
+      resolveSongAudio(track.title, track.artist, track.album).then(resolved => {
+        if (resolved && resolved.url) {
+          const fullAudioUrl = resolved.streamUrl || resolved.url;
+          const upgradedTrack = {
+            ...track,
+            audioUrl: fullAudioUrl,
+            downloadUrl: resolved.url,
+            isFullAudio: true,
+            audioQuality: resolved.quality || '320 Kbps HQ Studio Audio',
+            audioType: '320 Kbps Full HQ Audio',
+            duration: resolved.duration || track.duration
+          };
+          setCurrentTrack(upgradedTrack);
+          audio.src = fullAudioUrl;
+          audio.play().then(() => {
+            setIsPlaying(true);
+            setIsLoading(false);
+          }).catch(playErr => {
+            console.warn('Playback error after upgrade:', playErr);
+            setIsLoading(false);
+          });
+          return;
+        }
+
+        // Fallback if resolving yielded nothing
+        if (track.audioUrl) {
+          audio.src = track.audioUrl;
+          audio.play().then(() => {
+            setIsPlaying(true);
+            setIsLoading(false);
+          }).catch(err => {
+            setIsLoading(false);
+            setIsPlaying(false);
+          });
+        }
+      }).catch(() => {
+        if (track.audioUrl) {
+          audio.src = track.audioUrl;
+          audio.play().catch(console.warn);
+        }
+      });
+      return;
+    }
 
     if (track.audioUrl) {
       setIsLoading(true);

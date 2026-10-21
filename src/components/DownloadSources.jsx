@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Download, ExternalLink, ShieldCheck, AlertCircle, Disc3, Radio, Sparkles, CheckCircle2, CheckCheck } from 'lucide-react';
+import { downloadSongFile } from '../utils/downloadHelper';
 
 export default function DownloadSources({
   sourcesData,
@@ -20,26 +21,17 @@ export default function DownloadSources({
     : officialSources;
 
   // Direct backend song download in full 320kbps without redirect
-  const handleDirectDownload = (source) => {
+  const handleDirectDownload = async (source) => {
     setDownloadingId(source.id);
-
-    const title = selectedSong?.title || 'Tamil Song';
-    const artist = selectedSong?.artist || '';
-    const album = selectedSong?.album || '';
-    const audioUrl = selectedSong?.audioUrl || '';
-
-    const downloadEndpoint = `/api/download/song?audioUrl=${encodeURIComponent(audioUrl)}&title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`;
-
-    const link = document.createElement('a');
-    link.href = downloadEndpoint;
-    link.setAttribute('download', `${title} (320kbps).mp3`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setTimeout(() => {
-      setDownloadingId(null);
-    }, 2000);
+    try {
+      await downloadSongFile(selectedSong);
+    } catch (err) {
+      console.error('Source download error:', err);
+    } finally {
+      setTimeout(() => {
+        setDownloadingId(null);
+      }, 1500);
+    }
   };
 
   return (

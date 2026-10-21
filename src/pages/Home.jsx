@@ -199,7 +199,14 @@ export default function Home() {
     // 3. Resolve full 320kbps stream URL asynchronously for preview tracks
     setIsResolvingAudio(true);
     try {
-      const resolved = await resolveSongAudio(song.title, song.artist, song.album);
+      let resolved = await resolveSongAudio(song.title, song.artist, song.album);
+      if (!resolved || !resolved.url) {
+        const simplified = (song.title || '').replace(/\s*\(From\s+[^)]+\)/gi, '').replace(/\s*-\s*.*$/gi, '').trim();
+        if (simplified && simplified !== song.title) {
+          resolved = await resolveSongAudio(simplified, (song.artist || '').split('&')[0].trim(), song.album);
+        }
+      }
+
       if (resolved && resolved.url) {
         const fullAudioUrl = resolved.streamUrl || resolved.url;
         const enrichedSong = {
