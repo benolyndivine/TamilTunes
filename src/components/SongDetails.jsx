@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { extractSongDetails } from '../utils/matchSong';
 import { resolveSongAudio } from '../services/musicMetadata';
-import { downloadSongFile, downloadCoverImage } from '../utils/downloadHelper';
+import { downloadSongFile, downloadCoverImage, downloadSongCanvas } from '../utils/downloadHelper';
 import SpotifyCanvasModal from './SpotifyCanvasModal';
 
 export default function SongDetails({
@@ -38,6 +38,8 @@ export default function SongDetails({
   const [copiedText, setCopiedText] = useState(null);
   const [isDownloadingSong, setIsDownloadingSong] = useState(false);
   const [isDownloadingCover, setIsDownloadingCover] = useState(false);
+  const [isDownloadingCanvas, setIsDownloadingCanvas] = useState(false);
+  const [canvasDownloaded, setCanvasDownloaded] = useState(false);
   const [isCanvasModalOpen, setIsCanvasModalOpen] = useState(false);
 
 
@@ -104,6 +106,29 @@ export default function SongDetails({
       setTimeout(() => {
         setIsDownloadingCover(false);
       }, 1200);
+    }
+  };
+
+  // Automatically resolves and downloads the 1080p 60fps canvas video of this specific song directly in backend
+  const handleDownloadCanvas = async () => {
+    if (isDownloadingCanvas) return;
+    setIsDownloadingCanvas(true);
+    setCanvasDownloaded(false);
+
+    try {
+      const res = await downloadSongCanvas(song);
+      if (res && res.success) {
+        setCanvasDownloaded(true);
+        setTimeout(() => setCanvasDownloaded(false), 3500);
+      } else {
+        // If not found automatically, open the helper modal so user can paste any Spotify link
+        setIsCanvasModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Canvas download error:', err);
+      setIsCanvasModalOpen(true);
+    } finally {
+      setTimeout(() => setIsDownloadingCanvas(false), 1200);
     }
   };
 
@@ -288,16 +313,43 @@ export default function SongDetails({
               <span>{isDownloadingCover ? 'Saving Cover...' : 'Download Cover'}</span>
             </button>
 
-            {/* Spotify Canvas Video Button (1080p 60fps) */}
-            <button
-              type="button"
-              onClick={() => setIsCanvasModalOpen(true)}
-              className="flex items-center space-x-2 px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-600/90 to-teal-600/90 hover:from-emerald-500 hover:to-teal-500 text-white text-sm font-bold shadow-lg shadow-emerald-950/40 border border-emerald-500/30 transition transform active:scale-95"
-              title="Download official Spotify Canvas video in 1080p 60fps (~30s loop)"
-            >
-              <Film className="w-4 h-4 text-emerald-300" />
-              <span>Spotify Canvas (1080p 60fps)</span>
-            </button>
+            {/* Automatic Spotify Canvas Download Button (1080p 60fps) */}
+            <div className="flex items-center space-x-1">
+              <button
+                type="button"
+                onClick={handleDownloadCanvas}
+                disabled={isDownloadingCanvas}
+                className="flex items-center space-x-2 px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white text-sm font-bold shadow-lg shadow-emerald-950/40 border border-emerald-500/30 transition transform active:scale-95 disabled:opacity-60"
+                title="Automatically download official Spotify Canvas video in 1080p 60fps (~30s loop)"
+              >
+                {isDownloadingCanvas ? (
+                  <>
+                    <Disc3 className="w-4 h-4 animate-spin text-emerald-200" />
+                    <span>Resolving & Downloading 1080p Canvas...</span>
+                  </>
+                ) : canvasDownloaded ? (
+                  <>
+                    <CheckCheck className="w-4 h-4 text-white" />
+                    <span>1080p Canvas Downloaded!</span>
+                  </>
+                ) : (
+                  <>
+                    <Film className="w-4 h-4 text-emerald-300" />
+                    <span>Download Canvas (1080p 60fps)</span>
+                  </>
+                )}
+              </button>
+
+              {/* Preview 9:16 Canvas Loop Button */}
+              <button
+                type="button"
+                onClick={() => setIsCanvasModalOpen(true)}
+                className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition"
+                title="Preview 9:16 Vertical Canvas Video Loop"
+              >
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+              </button>
+            </div>
 
             {/* Copy Song Name Only Button */}
             <button

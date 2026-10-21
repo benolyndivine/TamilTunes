@@ -335,3 +335,50 @@ export async function downloadCanvasVideo(canvasUrl, title = 'Track') {
   window.open(canvasUrl, '_blank');
   return { success: true, method: 'direct-window' };
 }
+
+/**
+ * Automatically resolves and downloads the 1080p 60fps Spotify Canvas of a specific song.
+ * Directly triggered when the user clicks "Download Canvas" on any track.
+ *
+ * @param {Object} song The song object to download canvas for
+ * @returns {Promise<{ success: boolean, canvasUrl?: string, method?: string, error?: string }>}
+ */
+export async function downloadSongCanvas(song) {
+  if (!song) {
+    return { success: false, error: 'No song provided for canvas download' };
+  }
+
+  const title = song.title || 'Song';
+  const artist = song.artist || '';
+  const album = song.album || '';
+  const spotifyUrl = song.externalUrls?.spotify || '';
+
+  try {
+    const { fetchSpotifyCanvas } = await import('../services/canvasService');
+
+    const res = await fetchSpotifyCanvas({
+      url: spotifyUrl,
+      title,
+      artist
+    });
+
+    if (res && res.success && res.canvasUrl) {
+      const downloadRes = await downloadCanvasVideo(res.canvasUrl, title);
+      return {
+        success: downloadRes.success,
+        canvasUrl: res.canvasUrl,
+        method: downloadRes.method,
+        title
+      };
+    }
+
+    return {
+      success: false,
+      hasCanvas: false,
+      error: res?.error || 'No Spotify Canvas available for this track.'
+    };
+  } catch (err) {
+    console.error('downloadSongCanvas error:', err);
+    return { success: false, error: err.message };
+  }
+}
