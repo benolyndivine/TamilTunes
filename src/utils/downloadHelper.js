@@ -57,6 +57,19 @@ export async function downloadSongFile(song) {
     } catch (e) {}
   }
 
+  // Fallback 2: Query /api/download/song?format=json directly from serverless backend
+  if (!targetUrl || targetUrl.includes('preview') || targetUrl.includes('apple.com')) {
+    try {
+      const res = await fetch(`/api/download/song?title=${encodeURIComponent(rawTitle)}&artist=${encodeURIComponent(rawArtist)}&album=${encodeURIComponent(rawAlbum)}&format=json`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.downloadUrl) {
+          targetUrl = json.downloadUrl;
+        }
+      }
+    } catch (e) {}
+  }
+
   // Strategy A: Direct in-browser Blob download from high-speed CDN
   // aac.saavncdn.com supports CORS (Access-Control-Allow-Origin: *).
   // This downloads the complete full-length file with 100% native save and exact filename,
