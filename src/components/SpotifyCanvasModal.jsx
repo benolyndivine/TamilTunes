@@ -35,6 +35,7 @@ export default function SpotifyCanvasModal({
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [videoFitMode, setVideoFitMode] = useState('contain');
   const [copiedLink, setCopiedLink] = useState(false);
 
   const videoRef = useRef(null);
@@ -166,7 +167,7 @@ export default function SpotifyCanvasModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl shadow-violet-950/50 overflow-hidden my-auto">
+      <div className="relative w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl shadow-violet-950/50 overflow-hidden my-auto">
         
         {/* Glow ambient header decoration */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400" />
@@ -324,10 +325,24 @@ export default function SpotifyCanvasModal({
 
           {/* Canvas Video Preview Player Container */}
           {canvasData && (
-            <div className="flex flex-col md:flex-row items-center gap-6 p-4 rounded-2xl bg-slate-950/70 border border-slate-800/80">
+            <div className="flex flex-col lg:flex-row items-center gap-6 p-5 rounded-2xl bg-slate-950/70 border border-slate-800/80">
               
-              {/* Vertical 9:16 Smartphone Mockup Video Frame */}
-              <div className="relative w-48 sm:w-56 aspect-[9/16] rounded-2xl overflow-hidden bg-black shadow-2xl shadow-emerald-950/30 border border-slate-700/80 group flex-shrink-0">
+              {/* 432 x 380 px Video Display Container */}
+              <div
+                className="relative rounded-2xl overflow-hidden bg-black shadow-2xl shadow-emerald-950/40 border border-slate-700/80 group flex-shrink-0 flex items-center justify-center mx-auto"
+                style={{ width: '432px', height: '380px', maxWidth: '100%' }}
+              >
+                {/* Ambient Blurred Video Background to Gracefully Fill 432x380 px */}
+                <video
+                  src={canvasData.canvasUrl}
+                  loop
+                  autoPlay
+                  playsInline
+                  muted
+                  className="absolute inset-0 w-full h-full object-cover blur-xl opacity-35 scale-110 pointer-events-none"
+                />
+
+                {/* Main 1080p 60fps Video fitted in 432x380 px */}
                 <video
                   ref={videoRef}
                   src={canvasData.canvasUrl}
@@ -335,7 +350,7 @@ export default function SpotifyCanvasModal({
                   autoPlay
                   playsInline
                   muted
-                  className="w-full h-full object-cover cursor-pointer"
+                  className={`relative z-10 w-full h-full ${videoFitMode === 'contain' ? 'object-contain' : 'object-cover'} cursor-pointer`}
                   onClick={togglePlay}
                 />
 
@@ -343,31 +358,42 @@ export default function SpotifyCanvasModal({
                 <button
                   type="button"
                   onClick={togglePlay}
-                  className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white"
+                  className="absolute inset-0 z-20 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white"
                 >
-                  <div className="p-3 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-600">
-                    {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current translate-x-0.5" />}
+                  <div className="p-3.5 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-600 shadow-xl">
+                    {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current translate-x-0.5" />}
                   </div>
                 </button>
 
-                {/* Quality Badge Overlay */}
-                <div className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
-                  1080p • 60 FPS
+                {/* Quality & 432x380 Dimension Badge Overlay */}
+                <div className="absolute top-3 left-3 z-20 flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md text-[11px] font-bold text-emerald-300 border border-emerald-500/30 shadow-md">
+                  <Film className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>432 × 380 • 1080p 60FPS</span>
                 </div>
 
-                {/* Fullscreen Button */}
-                <button
-                  type="button"
-                  onClick={handleFullscreen}
-                  className="absolute bottom-2.5 right-2.5 p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-slate-300 hover:text-white border border-slate-700 transition"
-                  title="Fullscreen preview"
-                >
-                  <Maximize2 className="w-3.5 h-3.5" />
-                </button>
+                {/* Fit Mode Toggle & Fullscreen Controls */}
+                <div className="absolute bottom-3 right-3 z-20 flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setVideoFitMode(prev => prev === 'contain' ? 'cover' : 'contain')}
+                    className="px-2.5 py-1 rounded-lg bg-black/70 hover:bg-slate-800 backdrop-blur-md text-slate-200 text-[11px] font-semibold border border-slate-700 transition"
+                    title={videoFitMode === 'contain' ? 'Switch to Fill/Cover 432x380' : 'Switch to Fit/Contain in 432x380'}
+                  >
+                    {videoFitMode === 'contain' ? 'Fit (Contain)' : 'Fill (Cover)'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleFullscreen}
+                    className="p-1.5 rounded-lg bg-black/70 backdrop-blur-md text-slate-300 hover:text-white border border-slate-700 transition"
+                    title="Fullscreen preview"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Canvas Metadata & Download Actions */}
-              <div className="flex-1 space-y-4 text-center md:text-left min-w-0">
+              <div className="flex-1 space-y-4 text-center lg:text-left min-w-0 w-full">
                 <div>
                   <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold mb-2">
                     <CheckCheck className="w-3.5 h-3.5" />

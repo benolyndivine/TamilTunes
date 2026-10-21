@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Play,
   Pause,
@@ -17,7 +17,8 @@ import {
   Image as ImageIcon,
   CheckCheck,
   Zap,
-  Film
+  Film,
+  Maximize2
 } from 'lucide-react';
 import { extractSongDetails } from '../utils/matchSong';
 import { resolveSongAudio } from '../services/musicMetadata';
@@ -42,12 +43,53 @@ export default function SongDetails({
   const [canvasDownloaded, setCanvasDownloaded] = useState(false);
   const [isCanvasModalOpen, setIsCanvasModalOpen] = useState(false);
 
+  // Inline 432x380 Video Canvas States
+  const [mediaMode, setMediaMode] = useState('artwork'); // 'artwork' | 'video'
+  const [inlineCanvasUrl, setInlineCanvasUrl] = useState(null);
+  const [isLoadingInlineCanvas, setIsLoadingInlineCanvas] = useState(false);
+  const [inlineFitMode, setInlineFitMode] = useState('contain'); // 'contain' | 'cover'
+  const [isPlayingInlineVideo, setIsPlayingInlineVideo] = useState(true);
+  const inlineVideoRef = useRef(null);
+
 
   if (!song) return null;
 
   const { title: cleanTitle, movie } = extractSongDetails(song.title);
   const albumOrMovie = movie || song.album || 'Single / Soundtrack';
   const displayTitle = cleanTitle || song.title;
+
+  const loadInlineCanvas = async () => {
+    if (inlineCanvasUrl) return;
+    setIsLoadingInlineCanvas(true);
+    try {
+      const { fetchSpotifyCanvas } = await import('../services/canvasService');
+      const res = await fetchSpotifyCanvas({
+        url: song.externalUrls?.spotify || '',
+        title: displayTitle,
+        artist: song.artist
+      });
+      if (res && res.success && res.canvasUrl) {
+        setInlineCanvasUrl(res.canvasUrl);
+        setIsPlayingInlineVideo(true);
+      } else {
+        setInlineCanvasUrl(null);
+      }
+    } catch (err) {
+      console.warn('Inline canvas load error:', err);
+      setInlineCanvasUrl(null);
+    } finally {
+      setIsLoadingInlineCanvas(false);
+    }
+  };
+
+  // Reset or reload canvas when song changes
+  useEffect(() => {
+    setImageError(false);
+    setInlineCanvasUrl(null);
+    if (mediaMode === 'video') {
+      loadInlineCanvas();
+    }
+  }, [song.id, song.title]);
 
   // Copy ONLY the song name
   const handleCopySongName = (e) => {
@@ -144,41 +186,177 @@ export default function SongDetails({
 
       <div className="relative flex flex-col md:flex-row items-center md:items-start gap-6 sm:gap-8">
         
-        {/* High Quality Square Album Artwork with Download Overlay */}
-        <div className="relative w-44 sm:w-52 md:w-60 aspect-square rounded-2xl overflow-hidden shadow-2xl shadow-violet-950/40 bg-slate-950 flex-shrink-0 group">
-          {!imageError && song.artworkUrl ? (
-            <img
-              src={song.artworkUrl}
-              alt={`${song.title} Cover`}
-              onError={() => setImageError(true)}
-              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-slate-600">
-              <Music className="w-16 h-16 text-slate-700 animate-pulse" />
-              <span className="text-xs text-slate-500 mt-2">Music Artwork</span>
-            </div>
-          )}
-
-          {/* Quality Badge on Artwork */}
-          <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-slate-950/80 backdrop-blur-md text-[11px] font-bold text-cyan-300 border border-cyan-500/30 flex items-center space-x-1 shadow-md">
-            <Zap className="w-3 h-3 text-amber-400 fill-current" />
-            <span>320 Kbps HQ</span>
-          </div>
-
-          {/* Quick Cover Download Button on Artwork Hover */}
-          <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Media Container (Album Artwork vs 432x380 Canvas Video) */}
+        <div className="flex flex-col items-center md:items-start flex-shrink-0">
+          {/* Media Switcher Tabs */}
+          <div className="flex items-center space-x-1.5 mb-3 bg-slate-950/70 p-1 rounded-xl border border-slate-800 text-xs font-medium">
             <button
               type="button"
-              onClick={handleDownloadCover}
-              disabled={isDownloadingCover}
-              className="px-3 py-1.5 rounded-xl bg-slate-950/90 hover:bg-violet-600 text-white text-xs font-semibold backdrop-blur-md border border-slate-700 flex items-center space-x-1.5 shadow-lg transition"
-              title="Download high-resolution cover image directly"
+              onClick={() => setMediaMode('artwork')}
+              className={`px-3 py-1 rounded-lg transition ${mediaMode === 'artwork' ? 'bg-slate-800 text-white font-bold shadow' : 'text-slate-400 hover:text-white'}`}
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>{isDownloadingCover ? 'Saving...' : 'Save Cover'}</span>
+              Cover Artwork
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMediaMode('video');
+                loadInlineCanvas();
+              }}
+              className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg transition ${mediaMode === 'video' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold shadow' : 'text-slate-400 hover:text-emerald-300'}`}
+            >
+              <Film className="w-3.5 h-3.5" />
+              <span>Canvas Video (432 × 380)</span>
             </button>
           </div>
+
+          {mediaMode === 'artwork' ? (
+            /* High Quality Square Album Artwork with Download Overlay */
+            <div className="relative w-44 sm:w-52 md:w-60 aspect-square rounded-2xl overflow-hidden shadow-2xl shadow-violet-950/40 bg-slate-950 flex-shrink-0 group">
+              {!imageError && song.artworkUrl ? (
+                <img
+                  src={song.artworkUrl}
+                  alt={`${song.title} Cover`}
+                  onError={() => setImageError(true)}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-slate-600">
+                  <Music className="w-16 h-16 text-slate-700 animate-pulse" />
+                  <span className="text-xs text-slate-500 mt-2">Music Artwork</span>
+                </div>
+              )}
+
+              {/* Quality Badge on Artwork */}
+              <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-slate-950/80 backdrop-blur-md text-[11px] font-bold text-cyan-300 border border-cyan-500/30 flex items-center space-x-1 shadow-md">
+                <Zap className="w-3 h-3 text-amber-400 fill-current" />
+                <span>320 Kbps HQ</span>
+              </div>
+
+              {/* Quick Cover Download Button on Artwork Hover */}
+              <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  onClick={handleDownloadCover}
+                  disabled={isDownloadingCover}
+                  className="px-3 py-1.5 rounded-xl bg-slate-950/90 hover:bg-violet-600 text-white text-xs font-semibold backdrop-blur-md border border-slate-700 flex items-center space-x-1.5 shadow-lg transition"
+                  title="Download high-resolution cover image directly"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{isDownloadingCover ? 'Saving...' : 'Save Cover'}</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* 432 x 380 px Video Display Container */
+            <div
+              className="relative rounded-2xl overflow-hidden bg-black shadow-2xl shadow-emerald-950/40 border border-slate-700/80 group flex-shrink-0 flex items-center justify-center"
+              style={{ width: '432px', height: '380px', maxWidth: '100%' }}
+            >
+              {/* Ambient Blurred Video Background to Gracefully Fill 432x380 px */}
+              {inlineCanvasUrl && (
+                <video
+                  src={inlineCanvasUrl}
+                  loop
+                  autoPlay
+                  playsInline
+                  muted
+                  className="absolute inset-0 w-full h-full object-cover blur-xl opacity-35 scale-110 pointer-events-none"
+                />
+              )}
+
+              {isLoadingInlineCanvas ? (
+                <div className="flex flex-col items-center justify-center space-y-2 text-slate-400">
+                  <Disc3 className="w-8 h-8 animate-spin text-emerald-400" />
+                  <span className="text-xs">Resolving 1080p Canvas Video...</span>
+                </div>
+              ) : inlineCanvasUrl ? (
+                <>
+                  {/* Main 1080p 60fps Video fitted in 432x380 px */}
+                  <video
+                    ref={inlineVideoRef}
+                    src={inlineCanvasUrl}
+                    loop
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`relative z-10 w-full h-full ${inlineFitMode === 'contain' ? 'object-contain' : 'object-cover'} cursor-pointer`}
+                    onClick={() => {
+                      if (!inlineVideoRef.current) return;
+                      if (inlineVideoRef.current.paused) {
+                        inlineVideoRef.current.play();
+                        setIsPlayingInlineVideo(true);
+                      } else {
+                        inlineVideoRef.current.pause();
+                        setIsPlayingInlineVideo(false);
+                      }
+                    }}
+                  />
+
+                  {/* Overlaid Play/Pause Button on Hover */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!inlineVideoRef.current) return;
+                      if (inlineVideoRef.current.paused) {
+                        inlineVideoRef.current.play();
+                        setIsPlayingInlineVideo(true);
+                      } else {
+                        inlineVideoRef.current.pause();
+                        setIsPlayingInlineVideo(false);
+                      }
+                    }}
+                    className="absolute inset-0 z-20 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white"
+                  >
+                    <div className="p-3.5 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-600 shadow-xl">
+                      {isPlayingInlineVideo ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current translate-x-0.5" />}
+                    </div>
+                  </button>
+
+                  {/* Quality & 432x380 Dimension Badge Overlay */}
+                  <div className="absolute top-3 left-3 z-20 flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md text-[11px] font-bold text-emerald-300 border border-emerald-500/30 shadow-md">
+                    <Film className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>432 × 380 • 1080p 60FPS</span>
+                  </div>
+
+                  {/* Fit Mode Toggle & Modal Expansion */}
+                  <div className="absolute bottom-3 right-3 z-20 flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setInlineFitMode(prev => prev === 'contain' ? 'cover' : 'contain')}
+                      className="px-2.5 py-1 rounded-lg bg-black/70 hover:bg-slate-800 backdrop-blur-md text-slate-200 text-[11px] font-semibold border border-slate-700 transition"
+                      title={inlineFitMode === 'contain' ? 'Switch to Fill/Cover 432x380' : 'Switch to Fit/Contain in 432x380'}
+                    >
+                      {inlineFitMode === 'contain' ? 'Fit (Contain)' : 'Fill (Cover)'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsCanvasModalOpen(true)}
+                      className="p-1.5 rounded-lg bg-black/70 backdrop-blur-md text-slate-300 hover:text-white border border-slate-700 transition"
+                      title="Open Full Canvas View"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-3">
+                  <Film className="w-10 h-10 text-emerald-400/60" />
+                  <div>
+                    <p className="text-xs font-semibold text-slate-200">No Canvas Available</p>
+                    <p className="text-[11px] text-slate-400 mt-1">This song doesn't have an automated Spotify canvas loop.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCanvasModalOpen(true)}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition"
+                  >
+                    Paste Spotify Track Link
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Detailed Metadata Column */}
@@ -340,12 +518,19 @@ export default function SongDetails({
                 )}
               </button>
 
-              {/* Preview 9:16 Canvas Loop Button */}
+              {/* Preview 432x380 Canvas Video Button */}
               <button
                 type="button"
-                onClick={() => setIsCanvasModalOpen(true)}
+                onClick={() => {
+                  if (mediaMode !== 'video') {
+                    setMediaMode('video');
+                    loadInlineCanvas();
+                  } else {
+                    setIsCanvasModalOpen(true);
+                  }
+                }}
                 className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition"
-                title="Preview 9:16 Vertical Canvas Video Loop"
+                title="Preview 432 x 380 Video Canvas"
               >
                 <Sparkles className="w-4 h-4 text-emerald-400" />
               </button>
